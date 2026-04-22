@@ -1,0 +1,12 @@
+# Python cache
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Logs et données collectées par le serveur C2
+partie1/serveur_c2/logs/
+
+# Éditeurs
+.vscode/
+.idea/
+*.swp
