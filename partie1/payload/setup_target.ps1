@@ -22,7 +22,7 @@
 
 $ErrorActionPreference = "Stop"
 
-Write-Host "=== Préparation de la machine cible (TP BadUSB) ===" -ForegroundColor Cyan
+Write-Host "=== Preparation de la machine cible (TP BadUSB) ===" -ForegroundColor Cyan
 Write-Host ""
 
 # ──────────────────────────────────────────────────────────────
@@ -45,14 +45,14 @@ if (-not (Test-Path $explorerPolicyHKLM)) {
 }
 Set-ItemProperty -Path $explorerPolicyHKLM -Name "NoDriveTypeAutoRun" -Value 0x00 -Type DWord -Force
 Set-ItemProperty -Path $explorerPolicyHKLM -Name "NoAutorun"          -Value 0    -Type DWord -Force
-Write-Host "[+] HKLM : NoDriveTypeAutoRun = 0x00 (AutoRun activé – tous lecteurs)" -ForegroundColor Green
+Write-Host "[+] HKLM : NoDriveTypeAutoRun = 0x00 (AutoRun active - tous lecteurs)" -ForegroundColor Green
 
 # Niveau utilisateur courant (prioritaire sur HKLM)
 if (-not (Test-Path $explorerPolicyHKCU)) {
     $null = New-Item -Path $explorerPolicyHKCU -Force
 }
 Set-ItemProperty -Path $explorerPolicyHKCU -Name "NoDriveTypeAutoRun" -Value 0x00 -Type DWord -Force
-Write-Host "[+] HKCU : NoDriveTypeAutoRun = 0x00 (AutoRun activé – tous lecteurs)" -ForegroundColor Green
+Write-Host "[+] HKCU : NoDriveTypeAutoRun = 0x00 (AutoRun active - tous lecteurs)" -ForegroundColor Green
 
 # ──────────────────────────────────────────────────────────────
 # 2. Suppression du handler AutoPlay par défaut pour les
@@ -71,7 +71,7 @@ $autoPlayHandlers = @(
 foreach ($key in $autoPlayHandlers) {
     if (Test-Path $key) {
         $null = Remove-Item -Path $key -Recurse -Force 2>&1
-        Write-Host "[+] Handler AutoPlay supprimé : $key" -ForegroundColor Green
+        Write-Host "[+] Handler AutoPlay supprime : $key" -ForegroundColor Green
     }
 }
 
@@ -89,7 +89,7 @@ if ($svc) {
     if ($svc.Status -ne "Running") {
         Start-Service -Name "ShellHWDetection"
     }
-    Write-Host "[+] Service ShellHWDetection : démarré (StartupType = Automatic)" -ForegroundColor Green
+    Write-Host "[+] Service ShellHWDetection : demarre (StartupType = Automatic)" -ForegroundColor Green
 }
 
 # ──────────────────────────────────────────────────────────────
@@ -102,9 +102,9 @@ if ($svc) {
 
 try {
     Set-MpPreference -DisableRealtimeMonitoring $true -ErrorAction Stop
-    Write-Host "[+] Windows Defender : protection temps réel désactivée" -ForegroundColor Green
+    Write-Host "[+] Windows Defender : protection temps reel desactivee" -ForegroundColor Green
 } catch {
-    Write-Host "[!] Impossible de désactiver Defender (peut être géré par GPO) : $_" -ForegroundColor Yellow
+    Write-Host "[!] Impossible de desactiver Defender (peut etre gere par GPO) : $_" -ForegroundColor Yellow
 }
 
 # ──────────────────────────────────────────────────────────────
@@ -115,17 +115,17 @@ try {
 # ──────────────────────────────────────────────────────────────
 
 Write-Host ""
-Write-Host "[*] Redémarrage de l'Explorateur Windows pour appliquer les changements..." -ForegroundColor Cyan
+Write-Host "[*] Redemarrage de l'Explorateur Windows pour appliquer les changements..." -ForegroundColor Cyan
 
 $explorerPID = (Get-Process -Name explorer -ErrorAction SilentlyContinue | Select-Object -First 1).Id
 if ($explorerPID) {
     Stop-Process -Id $explorerPID -Force
     Start-Sleep -Seconds 2
     # L'Explorateur redémarre automatiquement après avoir été tué
-    Write-Host "[+] Explorateur redémarré." -ForegroundColor Green
+    Write-Host "[+] Explorateur redemarre." -ForegroundColor Green
 } else {
     Start-Process "explorer.exe"
-    Write-Host "[+] Explorateur lancé." -ForegroundColor Green
+    Write-Host "[+] Explorateur lance." -ForegroundColor Green
 }
 
 # ──────────────────────────────────────────────────────────────
@@ -133,16 +133,16 @@ if ($explorerPID) {
 # ──────────────────────────────────────────────────────────────
 
 Write-Host ""
-Write-Host "=== Machine cible prête pour la démonstration ===" -ForegroundColor Cyan
+Write-Host "=== Machine cible prete pour la demonstration ===" -ForegroundColor Cyan
 Write-Host ""
-Write-Host "  AutoRun           : ACTIVÉ (NoDriveTypeAutoRun = 0x00)"
-Write-Host "  Handler AutoPlay  : supprimé (autorun.inf prioritaire)"
+Write-Host "  AutoRun           : ACTIVE (NoDriveTypeAutoRun = 0x00)"
+Write-Host "  Handler AutoPlay  : supprime (autorun.inf prioritaire)"
 Write-Host "  ShellHWDetection  : démarré"
-Write-Host "  Windows Defender  : protection temps réel désactivée"
+Write-Host "  Windows Defender  : protection temps reel desactivee"
 Write-Host ""
 Write-Host "  >>> Insérer la clé USB préparée. <<<" -ForegroundColor Yellow
-Write-Host "      autorun.inf → launcher.vbs → payload.ps1"
+Write-Host "      autorun.inf -> launcher.vbs -> payload.ps1"
 Write-Host "      Aucune interaction utilisateur requise."
 Write-Host ""
-Write-Host "  RAPPEL : Réactiver Defender après le TP :" -ForegroundColor Red
+Write-Host "  RAPPEL : Reactiver Defender apres le TP :" -ForegroundColor Red
 Write-Host "  Set-MpPreference -DisableRealtimeMonitoring `$false" -ForegroundColor Red
