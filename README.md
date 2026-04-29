@@ -14,11 +14,12 @@
 Projet_BadUSB_Attack/
 ├── partie1/                    # Charge utile (attaque)
 │   ├── payload/
-│   │   ├── autorun.inf         # AutoPlay/AutoRun (Windows XP-11)
+│   │   ├── autorun.inf         # AutoRun – déclenche launcher.vbs à l'insertion
 │   │   ├── launcher.vbs        # Lanceur silencieux VBScript
 │   │   ├── payload.ps1         # Payload principal (version lisible)
 │   │   ├── payload_obfusque.ps1# Payload obfusqué (évasion AV)
-│   │   └── prepare_usb.ps1     # Préparation clé USB (bypass AutoRun W10)
+│   │   ├── prepare_usb.ps1     # Préparation clé USB (raccourci LNK + masquage)
+│   │   └── setup_target.ps1    # Préparation machine cible (réactivation AutoRun)
 │   └── serveur_c2/
 │       ├── server.py           # Serveur C2 Flask (attaquant)
 │       └── requirements.txt
@@ -34,9 +35,9 @@ Projet_BadUSB_Attack/
 
 | Étape | Action | Délai |
 |-------|--------|-------|
+| 0 | `setup_target.ps1` exécuté **une fois** sur la machine cible (avant la démo) | Avant T+0 |
 | 1 | Insertion de la clé USB dans le port | T+0 s |
-| 2a | AutoPlay (toast) → l'utilisateur clique → `launcher.vbs` via `shellexecute=` | T+0–5 s |
-| 2b | *Ou* : l'utilisateur double-clique sur le leurre `Documents.lnk` | T+0–? s |
+| 2 | Windows lit `autorun.inf` → `launcher.vbs` s'exécute automatiquement (aucun clic) | T+0–1 s |
 | 3 | `payload.ps1` s'exécute en arrière-plan | T+1 s |
 | 4 | Anti-analyse + élévation silencieuse (UAC bypass) | T+1–3 s |
 | 5 | Création du compte administrateur caché | T+4 s |
@@ -48,52 +49,70 @@ Projet_BadUSB_Attack/
 
 ### Mécanisme de déclenchement automatique
 
-#### Pourquoi `autorun.inf` seul ne suffit plus sur Windows 10/11
+#### Pré-condition : AutoRun activé sur la machine cible
 
-Depuis Windows Vista (correctif KB971029), l'entrée **`open=`** de `autorun.inf`
-est désactivée pour les lecteurs amovibles. Sur Windows 10/11 en configuration
-standard, insérer une clé USB avec uniquement `autorun.inf` ne déclenche
-**aucun programme automatiquement**.
+L'entrée **`open=`** de `autorun.inf` déclenche `launcher.vbs` automatiquement
+lors de l'insertion de la clé USB, **sans aucun clic de l'utilisateur** — à
+condition qu'AutoRun soit activé sur la machine cible.
 
-#### Stratégie de contournement (deux couches)
+Par défaut sous Windows 10/11 (correctif KB971029), AutoRun est désactivé pour
+les lecteurs amovibles (`NoDriveTypeAutoRun = 0x91`). La clé de registre
+`NoDriveTypeAutoRun` est le seul verrou à lever.
 
-| Couche | Technique | Interaction requise |
-|--------|-----------|---------------------|
-| 1 – AutoPlay | `shellexecute=` + `UseAutoPlay=1` dans `autorun.inf` | L'utilisateur clique sur la notification toast, puis sur l'action affichée |
-| 2 – LNK leurre | Raccourci `.lnk` avec icône de dossier à la racine de la clé | L'utilisateur ouvre l'Explorateur et double-clique sur le « dossier » |
+#### Étape A – Préparation de la machine cible (`setup_target.ps1`)
 
-**Couche 1 – AutoPlay (Windows 10/11)**
+Exécuter **une fois** sur la machine cible, avant la démonstration :
 
-Windows 10/11 affiche encore une notification *toast* lors de l'insertion d'une
-clé USB. L'entrée `shellexecute=launcher.vbs` dans `autorun.inf` alimente le
-menu AutoPlay : si l'utilisateur clique sur la notification puis sélectionne
-l'action *« Ouvrir le dossier pour afficher les fichiers »*, `launcher.vbs`
-s'exécute de façon transparente.
+```powershell
+powershell -ExecutionPolicy Bypass -File setup_target.ps1
+```
 
-**Couche 2 – Raccourci LNK trompeur (ingénierie sociale)**
+Ce script :
+1. Positionne `NoDriveTypeAutoRun = 0x00` dans `HKLM` et `HKCU` → AutoRun actif pour tous les lecteurs.
+2. Supprime le handler AutoPlay par défaut (`StorageOnArrival`) qui pourrait intercepter l'événement avant `autorun.inf`.
+3. S'assure que le service `ShellHWDetection` (requis pour AutoRun) est démarré.
+4. Désactive la protection temps réel de Windows Defender pour la durée du TP.
+5. Redémarre l'Explorateur Windows pour appliquer les changements immédiatement (sans reboot).
 
-Le script `prepare_usb.ps1` crée automatiquement :
-- Un fichier `Documents.lnk` à la racine de la clé, affichant une icône de
-  dossier Windows standard — indiscernable d'un vrai dossier pour l'utilisateur.
-- La cible réelle du raccourci est `wscript.exe //B launcher.vbs`, ce qui
-  exécute le payload en mode silencieux (aucune fenêtre visible).
-- Les vrais fichiers du payload (`autorun.inf`, `launcher.vbs`, `payload.ps1`)
-  sont masqués avec les attributs Système + Caché (`attrib +H +S`).
+#### Étape B – Insertion de la clé USB
 
-Résultat : l'utilisateur ne voit qu'un dossier *« Documents »* sur sa clé. En
-double-cliquant dessus, il déclenche le payload à son insu.
+Une fois la machine cible préparée, insérer la clé USB :
+
+```
+[Clé USB insérée]
+       │
+       ▼
+[Windows lit autorun.inf]   ← open=launcher.vbs
+       │
+       ▼
+[launcher.vbs exécuté automatiquement]  ← aucune interaction
+       │
+       ▼
+[payload.ps1 lancé via PowerShell masqué]
+```
 
 ### Fichiers à copier sur la clé USB
 
 ```
 Racine de la clé USB/
-├── autorun.inf             ← masqué après prepare_usb.ps1
-├── launcher.vbs            ← masqué après prepare_usb.ps1
-├── payload.ps1             ← masqué après prepare_usb.ps1
-└── Documents.lnk           ← créé par prepare_usb.ps1 (visible, icône dossier)
+├── autorun.inf             ← déclencheur (open=launcher.vbs)
+├── launcher.vbs            ← lanceur silencieux
+└── payload.ps1             ← charge utile
 ```
 
 ### Configuration avant déploiement
+
+**Étape A – Préparer la machine cible (une fois, avant la démo)**
+
+1. Sur la machine cible (Windows 10/11), ouvrir PowerShell en tant qu'Administrateur.
+2. Exécuter :
+   ```powershell
+   powershell -ExecutionPolicy Bypass -File setup_target.ps1
+   ```
+   Ce script réactive AutoRun (`NoDriveTypeAutoRun = 0x00`), démarre le service
+   `ShellHWDetection` et désactive temporairement Windows Defender.
+
+**Étape B – Préparer et déployer la clé USB**
 
 1. Lancer le serveur C2 sur la machine attaquante :
    ```bash
@@ -112,12 +131,8 @@ Racine de la clé USB/
 4. Copier `autorun.inf`, `launcher.vbs` et `payload.ps1` à la racine de la
    clé USB.
 
-5. **Préparer la clé USB avec le bypass Windows 10** (depuis la machine
-   attaquante ou toute machine Windows) :
-   ```powershell
-   powershell -ExecutionPolicy Bypass -File prepare_usb.ps1 -DriveLetter E
-   ```
-   Ce script crée le raccourci `Documents.lnk` et masque les fichiers payload.
+5. **Insérer la clé USB dans la machine cible** : `launcher.vbs` s'exécute
+   automatiquement, sans aucune interaction de l'utilisateur.
 
 ### Fonctionnalités du payload
 

