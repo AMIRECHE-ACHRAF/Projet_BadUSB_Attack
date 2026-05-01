@@ -15,6 +15,7 @@
 #   5. Surveillance des modifications RDP et WinRM
 #   6. Surveillance des processus PowerShell lancés en mode caché
 #   7. Alerte + blocage automatique en cas de détection
+#   8. Détection et blocage de l'exploit RedSun (LPE via Defender)
 # ==============================================================
 
 $ErrorActionPreference = "Stop"
@@ -338,8 +339,115 @@ function Invoke-InitialHardening {
 }
 
 # ──────────────────────────────────────────────────────────────
-# POINT D'ENTRÉE PRINCIPAL
+# 8. DÉTECTION ET BLOCAGE DE L'EXPLOIT REDSUN (LPE via Defender)
+#
+# RedSun exploite la logique de restauration de Windows Defender
+# pour élever ses privilèges au niveau SYSTEM sans prompt UAC.
+# Contre-mesures :
+#   a) Surveille le lancement de tout processus nommé RedSun.exe
+#      et le tue immédiatement.
+#   b) Vérifie que le pilote minifiltre de Defender (WdFilter)
+#      est actif – sa désactivation est un pré-requis de RedSun.
+#   c) Optionnel : crée une règle AppLocker bloquant l'exécution
+#      de tout exécutable non signé Microsoft depuis un lecteur
+#      amovible (chemin %HOMEDRIVE% exclu).
 # ──────────────────────────────────────────────────────────────
+
+function Start-RedSunMonitor {
+    Write-Log "INFO" "Démarrage de la surveillance RedSun LPE…"
+
+    # ── a) Vérification du pilote minifiltre WdFilter ──────────
+    $wdFilter = Get-Service -Name "WdFilter" -EA SilentlyContinue
+    if ($null -eq $wdFilter) {
+        Write-Log "WARN" "Service WdFilter introuvable – Defender peut être désactivé."
+    } elseif ($wdFilter.Status -ne "Running") {
+        Write-Log "ALERT" "WdFilter n'est pas en cours d'exécution (Status=$($wdFilter.Status))."
+        Write-Log "ALERT" "Le pilote minifiltre de Defender est arrêté – condition favorable à RedSun."
+        try {
+            Start-Service -Name "WdFilter" -EA Stop
+            Write-Log "INFO" "WdFilter redémarré."
+        } catch {
+            Write-Log "WARN" "Impossible de redémarrer WdFilter : $_"
+        }
+    } else {
+        Write-Log "INFO" "WdFilter actif – protection Defender minifiltre OK."
+    }
+
+    # ── b) Surveillance WMI : exécution de RedSun.exe ──────────
+    $query = "SELECT * FROM __InstanceCreationEvent WITHIN 1 " +
+             "WHERE TargetInstance ISA 'Win32_Process' AND " +
+             "TargetInstance.Name = 'RedSun.exe'"
+
+    $action = {
+        $lf   = $global:DefenseLogFile
+        $ts   = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+        $proc = $event.SourceEventArgs.NewEvent.TargetInstance
+
+        $line = "[$ts][ALERT] Exécution de RedSun.exe détectée ! " +
+                "PID=$($proc.ProcessId)  ExecutablePath=$($proc.ExecutablePath)"
+        Write-Host $line -ForegroundColor Red
+        if ($lf) { Add-Content -Path $lf -Value $line }
+
+        # Terminaison immédiate du processus RedSun
+        try {
+            Stop-Process -Id $proc.ProcessId -Force -EA Stop
+            $ok = "[$ts][ALERT] RedSun.exe (PID=$($proc.ProcessId)) tué."
+            Write-Host $ok -ForegroundColor Red
+            if ($lf) { Add-Content -Path $lf -Value $ok }
+        } catch {
+            $warn = "[$ts][WARN] Impossible de tuer RedSun.exe PID=$($proc.ProcessId) : $_"
+            Write-Host $warn -ForegroundColor Yellow
+            if ($lf) { Add-Content -Path $lf -Value $warn }
+        }
+    }
+
+    $null = Register-WmiEvent -Query $query -SourceIdentifier "RedSunExec" -Action $action
+    Write-Log "INFO" "Surveillance RedSun.exe active (intervalle 1 s)."
+
+    # ── c) Restriction via AppLocker (si disponible) ───────────
+    # AppLocker nécessite Windows Enterprise/Education ou Server.
+    # On tente de créer une règle de refus pour les exécutables non signés
+    # provenant d'un lecteur amovible.
+    try {
+        $alSvc = Get-Service -Name AppIDSvc -EA Stop
+        if ($alSvc.Status -ne "Running") {
+            Set-Service  -Name AppIDSvc -StartupType Automatic -EA 0
+            Start-Service -Name AppIDSvc -EA 0
+        }
+
+        # Règle de refus : tout exécutable dont le chemin commence par un
+        # lecteur amovible (DriveType = 2) pour tous les utilisateurs.
+        $removableDrives = Get-WmiObject Win32_LogicalDisk -EA 0 |
+                           Where-Object { $_.DriveType -eq 2 } |
+                           Select-Object -ExpandProperty DeviceID
+
+        foreach ($drive in $removableDrives) {
+            $ruleName = "BlockUSBExe_$($drive.Replace(':',''))"
+            $existing = Get-AppLockerPolicy -Effective -EA 0 |
+                        Select-Xml "//FilePathRule[@Name='$ruleName']" 2>$null
+
+            if (-not $existing) {
+                $policy = [xml]@"
+<AppLockerPolicy Version="1">
+  <RuleCollection Type="Exe" EnforcementMode="Enabled">
+    <FilePathRule Id="$(New-Guid)" Name="$ruleName" Description="Bloque les EXE depuis $drive (lecteur amovible)" UserOrGroupSid="S-1-1-0" Action="Deny">
+      <Conditions>
+        <FilePathCondition Path="$drive\*"/>
+      </Conditions>
+    </FilePathRule>
+  </RuleCollection>
+</AppLockerPolicy>
+"@
+                Set-AppLockerPolicy -XmlPolicy $policy.OuterXml -Merge -EA 0
+                Write-Log "INFO" "Règle AppLocker ajoutée : blocage EXE depuis $drive."
+            }
+        }
+    } catch {
+        Write-Log "INFO" "AppLocker non disponible sur cette édition Windows – étape ignorée."
+    }
+}
+
+
 
 function Main {
     Write-Log "INFO" "======================================================"
@@ -361,6 +469,7 @@ function Main {
     Start-UserCreationMonitor
     Start-RDPWinRMMonitor
     Start-HiddenPSMonitor
+    Start-RedSunMonitor
 
     Write-Log "INFO" "Tous les mécanismes de défense sont actifs."
     Write-Log "INFO" "Appuyez sur Ctrl+C pour arrêter la surveillance."
@@ -382,6 +491,7 @@ function Main {
         Unregister-Event -SourceIdentifier "UserCreation"   -EA 0
         Unregister-Event -SourceIdentifier "RDPWinRMTimer"  -EA 0
         Unregister-Event -SourceIdentifier "HiddenPS"       -EA 0
+        Unregister-Event -SourceIdentifier "RedSunExec"     -EA 0
         Write-Log "INFO" "Surveillance arrêtée proprement."
     }
 }
