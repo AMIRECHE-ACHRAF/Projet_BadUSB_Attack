@@ -17,7 +17,8 @@ Projet_BadUSB_Attack/
 │   │   ├── autorun.inf         # AutoRun – déclenche launcher.vbs à l'insertion
 │   │   ├── launcher.vbs        # Lanceur silencieux VBScript
 │   │   ├── payload.ps1         # Payload principal (version lisible)
-│   │   └── payload_obfusque.ps1# Payload obfusqué (évasion AV)
+│   │   ├── payload_obfusque.ps1# Payload obfusqué (évasion AV)
+│   │   └── RedSun.exe          # LPE exploit (élévation de privilèges)
 │   └── serveur_c2/
 │       ├── server.py           # Serveur C2 Flask (attaquant)
 │       └── requirements.txt
@@ -36,28 +37,24 @@ Projet_BadUSB_Attack/
 | 1 | Insertion de la clé USB dans le port | T+0 s |
 | 2 | Windows lit `autorun.inf` → `launcher.vbs` s'exécute | T+0–1 s |
 | 3 | `payload.ps1` s'exécute dans le contexte de l'utilisateur courant | T+1 s |
-| 4 | Anti-analyse + élévation silencieuse (UAC bypass fodhelper) | T+1–3 s |
-| 5 | Création du compte administrateur caché | T+4 s |
-| 6 | Activation RDP + WinRM + règles pare-feu | T+5–8 s |
-| 7 | Collecte des informations système | T+9 s |
-| 8 | Exfiltration vers le serveur C2 (`10.10.1.13:8080`) | T+10–13 s |
-| 9 | Nettoyage des journaux | T+13–15 s |
-| 10 | Retrait de la clé USB | ≤ T+15 s |
+| 4 | Anti-analyse + élévation silencieuse via **RedSun** (LPE) | T+1–6 s |
+| 5 | Création du compte administrateur caché | T+7 s |
+| 6 | Activation RDP + WinRM + règles pare-feu | T+8–11 s |
+| 7 | Collecte des informations système | T+12 s |
+| 8 | Exfiltration vers le serveur C2 (`10.10.1.13:8080`) | T+13–16 s |
+| 9 | Nettoyage des journaux | T+16–18 s |
+| 10 | Retrait de la clé USB | ≤ T+20 s |
 
 ### Déclenchement depuis un compte utilisateur standard
 
 Le payload est conçu pour s'exécuter **depuis un compte utilisateur standard
-(non élevé)**. L'élévation de privilèges est obtenue automatiquement via le
-bypass UAC **fodhelper.exe** (MITRE ATT&CK T1548.002) :
+(non élevé)**. L'élévation de privilèges est obtenue via l'exploit
+**RedSun** (Local Privilege Escalation) :
 
 1. `launcher.vbs` lance `payload.ps1` dans le contexte de l'utilisateur courant.
 2. Le payload détecte qu'il ne tourne pas en mode administrateur.
-3. Il inscrit la commande de re-lancement dans
-   `HKCU:\Software\Classes\ms-settings\shell\open\command`, puis déclenche
-   `fodhelper.exe` (processus auto-élevé de Windows 10/11).
-4. Windows relance le payload avec les droits Administrateur, sans afficher
-   de prompt UAC.
-5. La clé temporaire est supprimée immédiatement.
+3. Il lance `RedSun.exe` (présent à la racine de la clé USB) en arrière-plan.
+4. RedSun exploite une vulnérabilité locale pour élever les droits au niveau SYSTEM.
 
 ```
 [Compte utilisateur standard]
@@ -68,10 +65,10 @@ bypass UAC **fodhelper.exe** (MITRE ATT&CK T1548.002) :
        ├─ Test-Admin → NON
        │
        ▼
-[UAC bypass fodhelper]
+[RedSun.exe exécuté (LPE → SYSTEM)]
        │
        ▼
-[payload.ps1 relancé avec droits Admin]
+[payload.ps1 s'exécute avec droits élevés]
        │
        ├─ Création compte backdoor (svc_XXXXXX)
        ├─ Activation RDP + WinRM
@@ -84,7 +81,8 @@ bypass UAC **fodhelper.exe** (MITRE ATT&CK T1548.002) :
 Racine de la clé USB/
 ├── autorun.inf             ← déclencheur (open=launcher.vbs)
 ├── launcher.vbs            ← lanceur silencieux
-└── payload.ps1             ← charge utile
+├── payload.ps1             ← charge utile
+└── RedSun.exe              ← exploit LPE (requis pour l'élévation)
 ```
 
 ### Déploiement
@@ -101,13 +99,13 @@ Interface de suivi : `http://10.10.1.13:8080/status`
 
 **Étape 2 – Préparer la clé USB**
 
-Copier `autorun.inf`, `launcher.vbs` et `payload.ps1` (ou `payload_obfusque.ps1`)
-à la racine de la clé USB.
+Copier `autorun.inf`, `launcher.vbs`, `payload.ps1` (ou `payload_obfusque.ps1`)
+**et `RedSun.exe`** à la racine de la clé USB.
 
 **Étape 3 – Insérer la clé USB dans la machine cible**
 
 L'utilisateur cible n'a pas besoin de droits administrateur. Le payload
-s'élève automatiquement.
+lance RedSun automatiquement pour s'élever.
 
 ### Fonctionnalités du payload
 
@@ -121,13 +119,12 @@ s'élève automatiquement.
 | Clés de registre VM | Vérifie `VMware Tools`, `VirtualBox Guest Additions` |
 | Temporisation | Pause initiale de 0,8 s (comportement moins suspect) |
 
-#### Contournement UAC (T1548.002 MITRE ATT&CK)
+#### Élévation de privilèges – RedSun LPE
 
-Le bypass **fodhelper.exe** est utilisé :
-- Écrit la commande malveillante dans
-  `HKCU:\Software\Classes\ms-settings\shell\open\command`
-- Lance `fodhelper.exe` (processus auto-élevé de Windows 10/11)
-- Supprime la clé de registre immédiatement après
+**RedSun** est un exploit de type Local Privilege Escalation (LPE) :
+- Lance `RedSun.exe` en arrière-plan (`-WindowStyle Hidden`)
+- Exploite une vulnérabilité locale pour obtenir les droits SYSTEM/Administrateur
+- Ne nécessite aucune interaction de l'utilisateur
 
 #### Création du compte administrateur
 

