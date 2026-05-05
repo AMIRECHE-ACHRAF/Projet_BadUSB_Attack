@@ -453,7 +453,7 @@ function Main {
     Write-Log "INFO" "======================================================"
     Write-Log "INFO" "   Script de défense BadUSB – Partie 2 – Démarrage"
     Write-Log "INFO" "======================================================"
-    Write-Log "INFO" "Fichier de journalisation : $LogFile"
+    Write-Log "INFO" "Fichier de journalisation : $global:DefenseLogFile"
 
     # Étape 1 : durcissement initial + vérification de l'état existant
     Invoke-InitialHardening
