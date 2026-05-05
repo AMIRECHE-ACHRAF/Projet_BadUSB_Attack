@@ -45,6 +45,21 @@ Projet_BadUSB_Attack/
 | 9 | Nettoyage des journaux | T+16–18 s |
 | 10 | Retrait de la clé USB | ≤ T+20 s |
 
+> **Remarque – AutoRun sur Windows 10/11 :** depuis Windows 7 KB971029,
+> `autorun.inf` est **désactivé** pour les supports USB sur toutes les
+> éditions modernes. Le déclenchement réel repose donc sur un clic
+> utilisateur (ouverture de `launcher.vbs`) ou sur des mécanismes
+> alternatifs silencieux :
+>
+> - **Fichier `.library-ms` malveillant** compressé dans une archive
+>   ZIP/RAR placée sur la clé. Dès que l'Explorateur Windows affiche le
+>   contenu, il interprète automatiquement le fichier `.library-ms` et
+>   déclenche une authentification SMB – permettant la capture de hashs
+>   NTLM sans aucun clic.
+> - **Raccourci `.lnk`** exploitant la vulnérabilité
+>   [CVE-2025-9491](https://msrc.microsoft.com/update-guide/vulnerability/CVE-2025-9491)
+>   pour masquer la commande réelle exécutée à l'ouverture du fichier.
+
 ### Déclenchement depuis un compte utilisateur standard
 
 Le payload est conçu pour s'exécuter **depuis un compte utilisateur standard
@@ -189,12 +204,31 @@ Interface de visualisation : `http://10.10.1.13:8080/status`
 
 | Endpoint | Méthode | Rôle |
 |----------|---------|------|
-| `/collect` | POST | Reçoit le JSON exfiltré |
+| `/collect` | POST | Reçoit le JSON exfiltré (texte clair) |
+| `/enc` | POST | Reçoit les données chiffrées AES-256-GCM (canal discret) |
 | `/b64?d=…` | GET | Repli Base64 |
 | `/status` | GET | Tableau de bord HTML |
 | `/` | GET | Page neutre |
 
 Les données sont persistées dans `partie1/serveur_c2/logs/collected_targets.json`.
+
+#### Canal AES-256-GCM (`/enc`)
+
+Pour rendre le trafic d'exfiltration plus difficile à identifier par un IDS,
+le serveur C2 propose un canal chiffré. Le payload envoie un blob binaire
+`nonce(12) ‖ tag(16) ‖ ciphertext` vers `/enc`. Le serveur déchiffre avec
+`pycryptodome` (AES-256-GCM) avant de stocker le résultat.
+
+```bash
+# Générer une clé partagée (à copier dans --key et dans $c2AesKeyHex du payload)
+python -c "import secrets; print(secrets.token_hex(32))"
+
+# Démarrer le serveur avec chiffrement activé
+python server.py --key <hex64> --port 8080
+```
+
+> **Note :** si `AesGcm` n'est pas disponible sur l'hôte cible (.NET < 5),
+> le payload bascule automatiquement vers le canal JSON en clair puis Base64.
 
 ---
 
@@ -218,6 +252,7 @@ powershell -ExecutionPolicy Bypass -File defense.ps1
 | 5 | **Surveillance RDP/WinRM** | Timer toutes les 5 s ; rétablit la désactivation si modification détectée |
 | 6 | **Surveillance processus PS cachés** | WMI sur `Win32_Process` ; détecte les indicateurs suspects (`-WindowStyle Hidden`, `-EncodedCommand`, etc.) et tue le processus |
 | 7 | **Durcissement initial** | Vérifie et corrige RDP, WinRM, règles pare-feu et comptes cachés au démarrage |
+| 8 | **Détection RedSun LPE** | Vérifie l'état du pilote minifiltre `WdFilter` (Defender) ; surveille WMI le lancement de `RedSun.exe` et le tue immédiatement ; crée une règle AppLocker (si disponible) bloquant tout exécutable provenant d'un lecteur amovible |
 
 ### Indicateurs de compromission (IoC) surveillés
 
@@ -228,6 +263,7 @@ powershell -ExecutionPolicy Bypass -File defense.ps1
 - Démarrage ou activation du service WinRM
 - Règle pare-feu `BackdoorRemoteAccess`
 - Clés de registre `SpecialAccounts\UserList` (comptes cachés)
+- Lancement de `RedSun.exe` (exploit LPE) ou pilote `WdFilter` arrêté
 
 ---
 
@@ -255,9 +291,38 @@ Enter-PSSession -ComputerName <IP_CIBLE> -Credential $cred
 
 ## Références
 
-- MITRE ATT&CK T1052.001 – Exfiltration Over USB
-- MITRE ATT&CK T1548.002 – Bypass User Account Control (fodhelper)
-- MITRE ATT&CK T1078.003 – Valid Accounts: Local Accounts
-- MITRE ATT&CK T1021.001 – Remote Services: RDP
-- MITRE ATT&CK T1059.001 – Command and Scripting Interpreter: PowerShell
-- MITRE ATT&CK T1562.001 – Impair Defenses: Disable or Modify Tools
+### MITRE ATT&CK
+
+- [T1052.001](https://attack.mitre.org/techniques/T1052/001/) – Exfiltration Over USB
+- [T1548.002](https://attack.mitre.org/techniques/T1548/002/) – Bypass User Account Control (fodhelper)
+- [T1078.003](https://attack.mitre.org/techniques/T1078/003/) – Valid Accounts: Local Accounts
+- [T1021.001](https://attack.mitre.org/techniques/T1021/001/) – Remote Services: RDP
+- [T1059.001](https://attack.mitre.org/techniques/T1059/001/) – Command and Scripting Interpreter: PowerShell
+- [T1562.001](https://attack.mitre.org/techniques/T1562/001/) – Impair Defenses: Disable or Modify Tools
+
+### RedSun LPE
+
+- Qualys Threat Research Unit – *Windows Defender LPE via Restore Mechanism (RedSun)* :
+  <https://blog.qualys.com/vulnerabilities-threat-research/2024/10/01/redsun-windows-defender-lpe>
+- Dépôt PoC du chercheur :
+  <https://github.com/qualys-research/redsun-lpe>
+
+### Vulnérabilité LNK (CVE-2025-9491)
+
+- Microsoft Security Response Center – *Windows Shell LNK Hidden Command Execution* :
+  <https://msrc.microsoft.com/update-guide/vulnerability/CVE-2025-9491>
+- MITRE CVE : <https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2025-9491>
+
+### Fichier `.library-ms` et capture de hash NTLM
+
+- Microsoft Docs – *Windows Library Definition Schema* :
+  <https://docs.microsoft.com/windows/win32/shell/library-schema-entry>
+- SpecterOps – *Stealing NTLM Hashes with Windows Library Files* :
+  <https://posts.specterops.io/stealing-ntlm-hashes-with-windows-library-files>
+
+### Chiffrement du trafic C2
+
+- IETF RFC 5116 – *An Interface and Algorithms for Authenticated Encryption* :
+  <https://datatracker.ietf.org/doc/html/rfc5116>
+- pycryptodome documentation – AES-GCM :
+  <https://pycryptodome.readthedocs.io/en/latest/src/cipher/modern.html#gcm-mode>
